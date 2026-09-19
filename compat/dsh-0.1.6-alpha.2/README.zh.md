@@ -10,7 +10,7 @@
 
 补丁仅提供插件与可重复 Runtime 构建所需的能力：Streamable HTTP MCP 的凭证引用请求头（已按新版 `packages/mcp/mcp-client` 重写后的 transport 重新移植，新版改用 `@modelcontextprotocol/client` 与 `scrubbedParentEnv`）、外部插件的已发布 Typert 协议识别（`analyzer.ts` 的 `isTypeMetaSymbol`；缺失时插件 10 个公开 Remote 方法只能发现 0 个），以及新增源码依赖对应的 lockfile 条目。
 
-旧系列的「可忽略插件非界面会话记录」补丁已移除：`dsh-v0.1.6-alpha.2` 已原生支持 ignorable 会话事件（`SessionEvent.ignorable`，见 `packages/core/session/src/surface.ts`），不再需要桥接。
+旧系列「可忽略插件非界面会话记录」补丁的读取侧已被上游原生支持（`SessionEvent.ignorable`，见 `packages/core/session/src/surface.ts`）；但 alpha.2 的 `Session.append` 尚不接受非界面事件的 ignorable 标记，插件写入的自定义事件会被持久层按必需事件拒绝，导致会话重启后无法加载——因此本系列保留写入侧桥接补丁（0003）。
 
 本补丁不会读取或写入 OpenBKN Token。
 

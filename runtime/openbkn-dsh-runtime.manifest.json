@@ -32,8 +32,12 @@
         "sha256": "32f4628286105dcad259723f6c2031c53907e9b5390e21e4ff695fe02a9802bb"
       },
       {
-        "file": "patches/0003-compatible-runtime-lockfile.patch",
-        "sha256": "2bad60f9f2932319242ce4fdb629ff0606c1e26b880c8ffc9fdedf089552064b"
+        "file": "patches/0003-plugin-ignorable-session-events.patch",
+        "sha256": "14fa9a2ce95a69ee820e85534c2b1ba6da858c4587225a7671d4ff18286000ee"
+      },
+      {
+        "file": "patches/0004-compatible-runtime-lockfile.patch",
+        "sha256": "4228ee2db1f14ac86b12d008ae781de215ebaf0f97c25582725b06b7508a06dd"
       }
     ]
   }

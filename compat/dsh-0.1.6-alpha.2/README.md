@@ -17,11 +17,12 @@ runtime build:
 - recognition of the published Typert protocol in an external plugin
   (`packages/typert/generator/src/analyzer.ts`, `isTypeMetaSymbol`); without
   it the analyzer discovers 0 of the plugin's 10 public Remote methods;
+- the write side of ignorable plugin session records: `Session.append` accepts
+  a `LogOnlyEventIntent` (`{ ignorable: true }`) for non-surface events. The
+  read side is native in `dsh-v0.1.6-alpha.2`, but without the write side a
+  plugin-owned event is persisted as required and the stored session refuses
+  to reload in any harness that lacks the plugin;
 - lockfile entries for the added source dependencies.
-
-The former `ignorable plugin session records` patch is gone: `dsh-v0.1.6-alpha.2`
-natively supports ignorable session events (`SessionEvent.ignorable`,
-`packages/core/session/src/surface.ts`). No bridging is needed anymore.
 
 It never reads or writes an OpenBKN token.
 
