@@ -282,3 +282,40 @@ CLI 行为复核：`package:check` 通过（退出码 0，审计输出不变）�
 ## 未验证项（不变，round6 第 6 节）
 
 Windows 原生、`.cmd` 原生早退、win32-x64 打包、GitHub Actions 在线、干净 checkout 全链路、强隔离跨机、业务 E2E。静态门禁侧：本轮两条 STOP 已关闭；如后续诊断再出新定位，按「先核实再处置」流程办理。
+
+---
+
+# CI 在线验收记录（2026-09-20，方案 A）
+
+## 执行方式
+
+fork `kalias/bkn-dsh` main 快进至修复分支 → `gh workflow run compatible-runtime.yml --ref main`（手动触发，无 tag，publish 跳过）。
+
+## 迭代过程（3 轮到绿）
+
+- **run#1 `35452475475`**：macos-14 ✅；windows 在 "Test plugin and compatibility tooling" 失败。**重量步骤全部在线验证通过**：frozen 安装（bkn-dsh 与 DSH 两侧）、compat 闭环（apply/verify/revert）、DSH 完整构建。失败定位（日志取证）：① 测试硬编码 POSIX 路径（windowsZipArgs/native-profile CLI 预期、执行位断言）；② `package-bundle.mjs` 顶层副作用 + Windows 裸 `pnpm` spawn ENOENT；③ 两个 `.bin` 镜像用例在 win32 判为 copy。
+- **run#2 `35453238573`**：windows 仅剩 `spawnSync pnpm.cmd EINVAL`（Node 2024 安全变更：.cmd 需 shell）与 `.bin` 两例；诊断信息（replaced dump）确认形态。
+- **run#3 `35453829775`**：windows-2022 ✅、macos-14 ✅；macos-13（darwin-x64）持续排队无法获得 runner。
+- **决策**：用户决定从发布矩阵移除 darwin-x64（Intel mac runner 队列不可靠）；矩阵/manifest/校验器/usage 同步收敛为 darwin-arm64 + win32-x64。
+- **run#4 `35457559502`（`4860bb9`）**：**completed / success**——两平台全绿。
+
+## run#4 证据（gh api 实测）
+
+- `build (macos-14, darwin-arm64): success`，`build (windows-2022, win32-x64): success`，`publish: skipped`（非 tag）。
+- 两 job 各 15 个步骤全绿，链路：checkout → LF 保全 → pnpm 11.7/node 22 → DSH 检出 → generator 配置 → **frozen 安装** → **compat 闭环** → **DSH runtime 构建** → **插件测试+仓库测试+package:check** → 插件打包 → profile → **打包归档** → **portability 检查** → **upload-artifact**。
+- 修复过程中产出的 Windows 特定修复：pnpm spawn 带 shell（EINVAL）、镜像根匹配大小写/分隔符规范化、路径期望 resolve() 化、执行位断言 POSIX-only、`package-bundle` 仅主模块执行。
+- run#1/#2 的 windows 日志同时构成「Windows 原生 frozen install/compat 闭环/DSH 构建/最终全绿」的在线证据链。
+
+## 平台验收状态更新
+
+| round6 第 6 节项 | 状态 |
+|---|---|
+| 1. Windows 原生 portability 与 launcher 测试 | ✅（run#4 windows job 全步骤含 portability 检查；测试中 symlink 用例真实执行非 skip） |
+| 2. Windows `.cmd` 早退原生行为 | ⚠️ 部分：`.cmd` 由 CI 生成文本断言覆盖，原生批处理执行仍无（需交互式验证） |
+| 3. win32-x64 实际打包、归档扫描、入口执行 | ✅ 打包+portability 在线通过；入口执行属 artifact 消费方验证 |
+| 4. GitHub Actions 在线 | ✅（4 次 run，证据链完整） |
+| 5. 干净 checkout 全链路 | ✅（每次 run 均从干净 checkout 起步） |
+| 6. 强隔离跨机启动 | ❌ 未验证（需独立机器） |
+| 7. 业务 E2E | 本轮 CI 未涉及（此前 3082 已验） |
+
+darwin-x64：按用户决策移出发布矩阵（manifest 不再声明该平台产物）。
