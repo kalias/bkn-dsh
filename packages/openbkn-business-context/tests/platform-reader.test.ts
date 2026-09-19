@@ -55,3 +55,20 @@ test('maps authorization failure without exposing the platform response', async 
   const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'token' }, async () => response({ detail: 'private diagnostics' }, 401))
   await assert.rejects(reader.listKnowledgeNetworks(AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'AUTHENTICATION_REQUIRED' && !error.message.includes('private'))
 })
+
+test('maps a 403 permission_denied domain gate to LICENSE_REQUIRED without exposing the response', async () => {
+  const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'token' }, async () => response({
+    error: { code: 'permission_denied', message: '请求的业务域未获准执行公共生命周期写入', required_action: 'request_authorization', request_id: 'req-1' },
+  }, 403))
+  await assert.rejects(reader.getInteractionOperations('int-1', AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'LICENSE_REQUIRED' && !error.message.includes('req-1'))
+})
+
+test('keeps non-permission 403 responses on AUTHENTICATION_REQUIRED', async () => {
+  const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'token' }, async () => response({ error: { code: 'role_check_failed' } }, 403))
+  await assert.rejects(reader.getInteractionOperations('int-1', AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'AUTHENTICATION_REQUIRED')
+})
+
+test('projects the license edition from bkn-safe capabilities', async () => {
+  const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'token' }, async () => response({ licensed: false, edition: 'community', capabilities: [], features: [] }))
+  assert.deepEqual(await reader.getLicenseEdition(AbortSignal.timeout(1_000)), { edition: 'community', licensed: false })
+})

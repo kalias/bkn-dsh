@@ -56,15 +56,18 @@ export function ProvenanceOverlay({ useProvenanceOverlay, load, close }: Provena
   const [view, setView] = useState<ProvenanceView | undefined>()
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [licenseRequired, setLicenseRequired] = useState(false)
   const dialog = useRef<HTMLElement>(null)
   useEffect(() => {
     if (state.handle === undefined || state.sessionId === undefined || state.messageId === undefined) return
     let active = true
-    setTab('execution'); setView(undefined); setFailed(false); setLoading(true)
+    setTab('execution'); setView(undefined); setFailed(false); setLicenseRequired(false); setLoading(true)
     void load(state.sessionId, state.messageId).then(next => {
       if (active) setView(next)
-    }).catch(() => {
-      if (active) setFailed(true)
+    }).catch(error => {
+      if (!active) return
+      if ((error as { code?: unknown })?.code === 'openbkn/provenance-license-required') setLicenseRequired(true)
+      else setFailed(true)
     }).finally(() => {
       if (active) setLoading(false)
     })
@@ -83,7 +86,7 @@ export function ProvenanceOverlay({ useProvenanceOverlay, load, close }: Provena
     <section ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label="OpenBKN business provenance" onMouseDown={event => event.stopPropagation()} style={dialogStyle}>
       <header style={headerStyle}><div><div style={eyebrowStyle}>TRACE-BACKED PROVENANCE</div><h2 style={{ margin: '4px 0 0', fontSize: 28 }}>业务溯源</h2></div><button type="button" aria-label="Close" onClick={close} style={closeStyle}>×</button></header>
       <nav aria-label="Provenance views" style={tabBarStyle}><TabButton active={tab === 'execution'} onClick={() => setTab('execution')}>执行溯源</TabButton><TabButton active={tab === 'graph'} onClick={() => setTab('graph')}>业务上下文图</TabButton><TabButton active={tab === 'evidence'} onClick={() => setTab('evidence')}>证据链</TabButton></nav>
-      <main style={{ padding: 28 }}>{loading ? <Loading /> : failed || view === undefined ? <LoadFailed /> : tab === 'execution' ? <Execution handle={state.handle} view={view} /> : tab === 'graph' ? <BusinessGraph view={view} /> : <EvidenceChain view={view} />}</main>
+      <main style={{ padding: 28 }}>{loading ? <Loading /> : licenseRequired ? <LicenseRequired /> : failed || view === undefined ? <LoadFailed /> : tab === 'execution' ? <Execution handle={state.handle} view={view} /> : tab === 'graph' ? <BusinessGraph view={view} /> : <EvidenceChain view={view} />}</main>
     </section>
   </div>
 }
@@ -136,6 +139,7 @@ function Status({ value }: { value?: string }) { return <span style={{ color: va
 function Empty({ text }: { text: string }) { return <div style={emptyStyle}><strong>暂无可展示的受管数据</strong><span>{text}</span></div> }
 function Loading() { return <div style={emptyStyle}><strong>正在读取本轮业务溯源…</strong><span>仅查询该 Interaction 已授权的 OpenBKN 记录。</span></div> }
 function LoadFailed() { return <div style={emptyStyle}><strong>业务溯源暂时无法读取</strong><span>请检查 OpenBKN 平台连接和当前用户权限后重试。不会使用模型文本替代平台记录。</span></div> }
+function LicenseRequired() { return <div style={emptyStyle}><strong>业务溯源为企业版能力</strong><span>当前平台许可（社区版）未包含执行溯源、业务上下文图与证据链。升级并激活企业版权证后即可查看，已有记录不会丢失（也可通过 OpenBKN CLI 的 trace 命令查看）。不会使用模型文本替代平台记录。</span></div> }
 function TabButton({ active, onClick, children }: { active: boolean; onClick(): void; children: string }) { return <button type="button" onClick={onClick} style={{ border: 0, borderBottom: active ? '3px solid #087d72' : '3px solid transparent', background: 'transparent', color: active ? '#087d72' : '#64748b', padding: '14px 18px', fontWeight: active ? 750 : 550, cursor: 'pointer', fontSize: 15 }}>{children}</button> }
 
 const backdropStyle = { pointerEvents: 'auto' as const, position: 'fixed' as const, inset: 0, display: 'grid', placeItems: 'center', background: 'rgb(15 23 42 / 38%)', padding: 20 }

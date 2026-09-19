@@ -38,6 +38,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       readonly layer: 'context-loader-mcp' | 'platform-api'
     }
     'openbkn/platform-unavailable': { readonly baseUrl: string }
+    'openbkn/provenance-license-required': { readonly edition: string }
   }
 }
 
@@ -182,6 +183,17 @@ export class OpenBknBusinessContextService extends TypertRemoteService {
         safeRunnerFailureCode(core.reason),
         safeRunnerFailureCode(graph.reason),
       )
+      if (safeRunnerFailureCode(core.reason) === 'LICENSE_REQUIRED' || safeRunnerFailureCode(graph.reason) === 'LICENSE_REQUIRED') {
+        const edition = await this.platformReader().getLicenseEdition(signal).then(
+          value => value?.edition,
+          () => undefined,
+        )
+        throw new RemoteError(
+          'openbkn/provenance-license-required',
+          'Business provenance is an enterprise capability; the current deployment license does not include it.',
+          { edition: edition ?? '' },
+        )
+      }
       throw new Error('OpenBKN provenance records are unavailable for this interaction.')
     }
     return buildProvenanceView(

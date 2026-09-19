@@ -3,6 +3,7 @@ import type { BusinessNetworkBinding } from './session-binding.js'
 
 export type PlatformReaderErrorCode =
   | 'AUTHENTICATION_REQUIRED'
+  | 'LICENSE_REQUIRED'
   | 'PLATFORM_MISMATCH'
   | 'PLATFORM_UNAVAILABLE'
   | 'REQUEST_ABORTED'
@@ -63,6 +64,14 @@ export class OpenBknPlatformReader {
     return this.admit(projectBusinessGraph(value))
   }
 
+  /** Resolve the deployment's license edition so license-gated failures can explain themselves. */
+  async getLicenseEdition(signal: AbortSignal): Promise<{ edition?: string; licensed?: boolean } | undefined> {
+    const value = await this.get('/api/safe/v1/capabilities', signal)
+    const source = record(value)
+    const edition = string(source?.edition)
+    return { ...(edition === undefined ? {} : { edition }), ...(typeof source?.licensed === 'boolean' ? { licensed: source.licensed } : {}) }
+  }
+
   private async get(path: string, signal: AbortSignal): Promise<JsonValue> {
     return await this.request(path, { method: 'GET' }, signal)
   }
@@ -96,6 +105,16 @@ export class OpenBknPlatformReader {
       throw new PlatformReaderError('PLATFORM_UNAVAILABLE', 'OpenBKN platform data is temporarily unavailable.', { cause: error })
     }
     if (response.status === 401 || response.status === 403) {
+      // A 403 with the platform's permission_denied code is a deployment-level
+      // license/domain gate, not a caller-identity problem. Its body is a small
+      // JSON error envelope, so a bounded read cannot balloon here.
+      if (response.status === 403) {
+        const body = await response.text().catch(() => '')
+        const failure = body.length <= 4096 ? record(safeParse(body))?.error : undefined
+        if (string(record(failure)?.code) === 'permission_denied') {
+          throw new PlatformReaderError('LICENSE_REQUIRED', 'The requested OpenBKN capability requires an enterprise license for this business domain.')
+        }
+      }
       throw new PlatformReaderError('AUTHENTICATION_REQUIRED', 'OpenBKN authentication is required.')
     }
     if (!response.ok) throw new PlatformReaderError('PLATFORM_UNAVAILABLE', 'OpenBKN platform data is temporarily unavailable.')
@@ -186,6 +205,7 @@ function fixedUrl(baseUrl: string, path: string, allowInsecureTls: boolean): URL
 
 function normalizeBaseUrl(value: string): string { return value.trim().replace(/\/+$/, '') }
 function record(value: unknown): Record<string, unknown> | undefined { return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined }
+function safeParse(text: string): unknown { try { return JSON.parse(text) } catch { return undefined } }
 function array(value: unknown): readonly unknown[] { return Array.isArray(value) ? value : [] }
 function string(value: unknown): string | undefined { return typeof value === 'string' && value.trim() ? value.trim().slice(0, 512) : undefined }
 function number(value: unknown): number | undefined { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined }
