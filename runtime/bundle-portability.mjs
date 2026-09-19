@@ -84,13 +84,21 @@ function storedTargetIsAbsolute(target) {
     || /^[A-Za-z]:[\\/]/.test(target)
 }
 
+// Windows compares paths case-insensitively and tolerates mixed separators,
+// but string comparisons do not; normalize before matching mirror roots.
+const normalizedKey = value => (process.platform === 'win32'
+  ? value.replaceAll('\\', '/').toLowerCase()
+  : value)
+
 function mirrorsTarget(mappings, root, target) {
   const canonicalRoot = realpathSync(resolve(root))
+  const targetKey = normalizedKey(target)
   for (const { source, into } of mappings) {
-    const rel = relative(source, target)
-    if (rel !== '' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) {
-      return join(canonicalRoot, into, rel)
-    }
+    const sourceKey = normalizedKey(source)
+    if (targetKey === sourceKey || !targetKey.startsWith(`${sourceKey}/`)) continue
+    const rel = targetKey.slice(sourceKey.length + 1)
+    if (rel.length === 0) continue
+    return join(canonicalRoot, into, rel)
   }
   return undefined
 }

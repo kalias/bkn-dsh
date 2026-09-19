@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, sep } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 
 import { assertPortableBundle, dereferenceSymlinks, prefixForms, scrubAbsolutePaths, stripInstallMetadata } from '../runtime/bundle-portability.mjs'
 
@@ -148,8 +148,15 @@ test('a mirrored .bin entry keeps resolving modules relative to its real file', 
   cpSync(source, root, { recursive: true })
 
   const replaced = dereferenceSymlinks(root, [source])
+  const link = join(root, 'node_modules', '.bin', 'semver')
+  const realpaths = {
+    target: realpathSync(link),
+    root: realpathSync(root),
+    sourceReal: realpathSync(source),
+    sourceRaw: resolve(source),
+  }
   const entry = replaced.find(item => item.link.endsWith(j('.bin', 'semver')))
-  assert.equal(entry?.kind, 'relative-link', `platform=${process.platform} replaced=${JSON.stringify(replaced)}`)
+  assert.equal(entry?.kind, 'relative-link', `platform=${process.platform} realpaths=${JSON.stringify(realpaths)} replaced=${JSON.stringify(replaced)}`)
   const output = execFileSync(process.execPath, [join(root, 'node_modules', '.bin', 'semver')], { encoding: 'utf8' })
   assert.equal(output.trim(), 'semver')
 
@@ -171,8 +178,15 @@ test('maps links through a bundle subdirectory prefix (runtime shape)', { skip: 
   cpSync(source, join(root, 'runtime'), { recursive: true })
 
   const replaced = dereferenceSymlinks(root, [{ source, into: 'runtime' }])
+  const link = join(root, 'runtime', 'node_modules', '.bin', 'semver')
+  const realpaths = {
+    target: realpathSync(link),
+    root: realpathSync(root),
+    sourceReal: realpathSync(source),
+    sourceRaw: resolve(source),
+  }
   const entry = replaced.find(item => item.link.endsWith(j('.bin', 'semver')))
-  assert.equal(entry?.kind, 'relative-link', `platform=${process.platform} replaced=${JSON.stringify(replaced)}`)
+  assert.equal(entry?.kind, 'relative-link', `platform=${process.platform} realpaths=${JSON.stringify(realpaths)} replaced=${JSON.stringify(replaced)}`)
   const output = execFileSync(process.execPath, [join(root, 'runtime', 'node_modules', '.bin', 'semver')], { encoding: 'utf8' })
   assert.equal(output.trim(), 'semver')
 

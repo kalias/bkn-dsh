@@ -28,10 +28,14 @@ export function parsePackManifest(raw, cwd) {
   }
 }
 
-// Windows spawn cannot execute `pnpm` without a shell: it is pnpm.cmd there.
-if (process.argv[1] === resolve(import.meta.dirname, '..', 'scripts', 'package-bundle.mjs').replaceAll('\\', '/') || process.argv[1] === import.meta.filename) {
-  const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
-const raw = execFileSync(pnpmCommand, ['pack', '--dry-run', '--json'], { cwd: packageDirectory, encoding: 'utf8' })
+// Spawning a .cmd through Node requires a shell since the 2024 security
+// change; plain `pnpm` resolves inside that shell on Windows.
+if (process.argv[1] === import.meta.filename || process.argv[1] === resolve(import.meta.dirname, 'package-bundle.mjs')) {
+const raw = execFileSync('pnpm', ['pack', '--dry-run', '--json'], {
+  cwd: packageDirectory,
+  encoding: 'utf8',
+  shell: process.platform === 'win32',
+})
 const packed = parsePackManifest(raw, packageDirectory)
 if (!Array.isArray(packed.files)) throw new Error('pnpm pack did not return a file manifest.')
 const paths = packed.files.map(file => file.path)
