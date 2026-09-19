@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import test from 'node:test'
 
 import { packageCompatibleRuntime, windowsZipArgs } from '../scripts/package-compatible-runtime.mjs'
 
 test('builds Windows built-in tar arguments for a ZIP archive', () => {
+  // resolve() is part of the function's contract (tar.exe -C needs a native path)
   assert.deepEqual(
     windowsZipArgs('/build/bundle', '/out/bundle.zip'),
-    ['-a', '-c', '-f', '/out/bundle.zip', '-C', '/build', 'bundle'],
+    ['-a', '-c', '-f', '/out/bundle.zip', '-C', resolve('/build/bundle', '..'), 'bundle'],
   )
 })
 

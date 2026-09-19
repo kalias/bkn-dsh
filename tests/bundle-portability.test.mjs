@@ -148,7 +148,8 @@ test('a mirrored .bin entry keeps resolving modules relative to its real file', 
   cpSync(source, root, { recursive: true })
 
   const replaced = dereferenceSymlinks(root, [source])
-  assert.equal(replaced.find(entry => entry.link.endsWith(j('.bin', 'semver'))).kind, 'relative-link')
+  const entry = replaced.find(item => item.link.endsWith(j('.bin', 'semver')))
+  assert.equal(entry?.kind, 'relative-link', `platform=${process.platform} replaced=${JSON.stringify(replaced)}`)
   const output = execFileSync(process.execPath, [join(root, 'node_modules', '.bin', 'semver')], { encoding: 'utf8' })
   assert.equal(output.trim(), 'semver')
 
@@ -170,7 +171,8 @@ test('maps links through a bundle subdirectory prefix (runtime shape)', { skip: 
   cpSync(source, join(root, 'runtime'), { recursive: true })
 
   const replaced = dereferenceSymlinks(root, [{ source, into: 'runtime' }])
-  assert.equal(replaced.find(entry => entry.link.endsWith(j('.bin', 'semver'))).kind, 'relative-link')
+  const entry = replaced.find(item => item.link.endsWith(j('.bin', 'semver')))
+  assert.equal(entry?.kind, 'relative-link', `platform=${process.platform} replaced=${JSON.stringify(replaced)}`)
   const output = execFileSync(process.execPath, [join(root, 'runtime', 'node_modules', '.bin', 'semver')], { encoding: 'utf8' })
   assert.equal(output.trim(), 'semver')
 

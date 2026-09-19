@@ -36,7 +36,10 @@ test('assembles a self-contained runtime with the patched dependency closure and
   assert.match(readFileSync(join(bundle.directory, 'bin', 'dsh'), 'utf8'), /DSH_HOME/)
   assert.match(readFileSync(join(bundle.directory, 'bin', 'dsh'), 'utf8'), /bootstrap-openbkn-plugin/)
   assert.equal(readFileSync(join(bundle.directory, 'bootstrap-openbkn-plugin.mjs'), 'utf8').includes('initializeProfile'), true)
-  assert.equal(statSync(join(bundle.directory, 'bin', 'dsh')).mode & 0o111, 0o111)
+  // Windows has no POSIX exec bit; the win32 launcher ships as bin/dsh.cmd
+  if (process.platform !== 'win32') {
+    assert.equal(statSync(join(bundle.directory, 'bin', 'dsh')).mode & 0o111, 0o111)
+  }
 })
 
 test('rejects a runtime directory without the patched dependency closure', () => {

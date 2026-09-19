@@ -28,7 +28,10 @@ export function parsePackManifest(raw, cwd) {
   }
 }
 
-const raw = execFileSync('pnpm', ['pack', '--dry-run', '--json'], { cwd: packageDirectory, encoding: 'utf8' })
+// Windows spawn cannot execute `pnpm` without a shell: it is pnpm.cmd there.
+if (process.argv[1] === resolve(import.meta.dirname, '..', 'scripts', 'package-bundle.mjs').replaceAll('\\', '/') || process.argv[1] === import.meta.filename) {
+  const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+const raw = execFileSync(pnpmCommand, ['pack', '--dry-run', '--json'], { cwd: packageDirectory, encoding: 'utf8' })
 const packed = parsePackManifest(raw, packageDirectory)
 if (!Array.isArray(packed.files)) throw new Error('pnpm pack did not return a file manifest.')
 const paths = packed.files.map(file => file.path)
@@ -42,3 +45,4 @@ for (const path of paths) {
 }
 console.log(`Package audit passed: ${packed.name}@${packed.version} (${paths.length} files)`)
 for (const path of required) console.log(path)
+}

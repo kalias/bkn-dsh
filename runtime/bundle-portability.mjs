@@ -64,9 +64,17 @@ export function stripInstallMetadata(root) {
 // A source root paired with the bundle subdirectory it was copied into.
 // Plain strings stay supported and map onto the bundle root itself.
 function sourceMappings(sourceRoots) {
-  return sourceRoots.map(entry => typeof entry === 'string'
-    ? { source: realpathSync(resolve(entry)), into: '' }
-    : { source: realpathSync(resolve(entry.source)), into: entry.into ?? '' })
+  const mappings = []
+  for (const entry of sourceRoots) {
+    const into = typeof entry === 'string' ? '' : entry.into ?? ''
+    const raw = resolve(typeof entry === 'string' ? entry : entry.source)
+    // realpath canonicalizes symlinked system roots (macOS /var) and 8.3
+    // short names (Windows RUNNER~1); the raw form covers sources whose
+    // realpath does not expand, so both are tried as matching roots.
+    mappings.push({ source: realpathSync(raw), into })
+    mappings.push({ source: raw, into })
+  }
+  return mappings
 }
 
 /** True when a link's stored target string is an absolute path (POSIX, UNC, or drive letter). */
