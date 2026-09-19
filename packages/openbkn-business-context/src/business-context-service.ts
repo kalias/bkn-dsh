@@ -56,7 +56,10 @@ export class OpenBknBusinessContextService extends TypertRemoteService {
 
   constructor(ctx: Context, readonly config: PluginConfig) {
     super(ctx, 'openbknBusinessContext')
-    ctx.on('agent/created', ({ agent }) => { this.bindWorkspaceNetworkIfUnique(agent) })
+    ctx.on('agent/created', ({ agent }) => {
+      this.bindWorkspaceNetworkIfUnique(agent)
+      return undefined
+    })
     ctx.on('agent/pre-step', async ({ agent, step, signal }, next) =>
       await this.refreshManagedMcpAtTurnStart(agent, step, signal, next))
     ctx.on('agent/turn-stopping', ({ agent, turn }) => {

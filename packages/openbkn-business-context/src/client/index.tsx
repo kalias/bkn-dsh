@@ -231,7 +231,7 @@ function createNetworkSessionOpener(ctx: Context, port: OpenBknUiPort) {
 
     const sessionId = mode === 'continue' ? latestWorkspaceSession(workspace, sessions) ?? await sessions.create({ workspaceId: workspace.workspaceId })
       : await sessions.create({ workspaceId: workspace.workspaceId })
-    sessions.open(sessionId)
+    uiWorkspace.openSession(sessionId)
     return sessionId
   }
 }

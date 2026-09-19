@@ -35,6 +35,7 @@ test('mounts the compatible MCP client with an ephemeral bearer header and verif
   assert.deepEqual(mounted, {
     transport: 'streamable-http', serverName: 'openbkn', url: 'http://localhost:8081/api/agent-retrieval/v1/mcp/',
     headers: { Authorization: 'Bearer test-token' }, toolCallTimeoutMs: 20_000, failOnStartupError: true,
+    maxInstructionBytes: 32_768,
     reconnect: { enabled: true, initialDelayMs: 500, maxDelayMs: 30_000, maxAttempts: 10 },
   })
 

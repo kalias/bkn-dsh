@@ -1,0 +1,36 @@
+{
+  "format": 1,
+  "compatibilityVersion": "dsh-0.1.6-alpha.2/openbkn-business-context.1",
+  "dsh": {
+    "tag": "dsh-v0.1.6-alpha.2",
+    "baseCommit": "ddefc45fbc7f8e46dd73185e68295696d1297887",
+    "upstream": "https://github.com/deepseek-ai/deepseek-harness.git"
+  },
+  "patches": [
+    {
+      "file": "patches/0001-credential-backed-mcp-headers.patch",
+      "sha256": "6ccc0632752f90f8b64b757eb28b2494d07e65fe6b5bf472538824470f67ec56",
+      "files": [
+        "packages/mcp/mcp-client/package.json",
+        "packages/mcp/mcp-client/src/connection.ts",
+        "packages/mcp/mcp-client/src/index.ts",
+        "packages/mcp/mcp-client/src/transport.ts",
+        "packages/mcp/mcp-client/tsconfig.json"
+      ]
+    },
+    {
+      "file": "patches/0002-third-party-typert-protocol.patch",
+      "sha256": "32f4628286105dcad259723f6c2031c53907e9b5390e21e4ff695fe02a9802bb",
+      "files": [
+        "packages/typert/generator/src/analyzer.ts"
+      ]
+    },
+    {
+      "file": "patches/0003-compatible-runtime-lockfile.patch",
+      "sha256": "2bad60f9f2932319242ce4fdb629ff0606c1e26b880c8ffc9fdedf089552064b",
+      "files": [
+        "pnpm-lock.yaml"
+      ]
+    }
+  ]
+}

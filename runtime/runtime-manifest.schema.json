@@ -29,7 +29,7 @@
       "type": "object",
       "required": ["tag", "baseCommit", "upstream"],
       "properties": {
-        "tag": { "const": "dsh-v0.1.2-rc.1" },
+        "tag": { "const": "dsh-v0.1.6-alpha.2" },
         "baseCommit": { "pattern": "^[0-9a-f]{40}$" },
         "upstream": { "pattern": "^https://" }
       }

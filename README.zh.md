@@ -31,7 +31,7 @@ bkn-dsh 是一个增量式 DeepSeek Harness 插件。授权用户可为一个会
 
 ### 推荐方式：OpenBKN 兼容 DSH Runtime
 
-对于 DSH `0.1.2-rc.1` 用户，请从项目 Releases 下载匹配的 OpenBKN Runtime 压缩包。该包包含固定版本的 DSH Runtime、版本受限的兼容桥接以及 bkn-dsh 插件产物；首次启动时仍使用 DSH 原生插件管理器激活插件，不会修改已有 DSH 安装。
+对于 DSH `0.1.6-alpha.2` 用户，请从项目 Releases 下载匹配的 OpenBKN Runtime 压缩包。该包包含固定版本的 DSH Runtime、版本受限的兼容桥接以及 bkn-dsh 插件产物；首次启动时仍使用 DSH 原生插件管理器激活插件，不会修改已有 DSH 安装。
 
 唯一前置条件为 Node.js 20 或更高版本。发布 profile 在构建阶段由 DSH 原生插件管理器创建，首次启动时复制到隔离 Home；客户侧无需 `pnpm`，也不需要访问 npm registry。
 
@@ -54,6 +54,6 @@ Runtime 使用隔离的 OpenBKN DSH Home（可用 `OPENBKN_DSH_HOME` 覆盖）�
 
 ### 面向 DSH 维护者的源码构建路径
 
-兼容补丁只适用于主动构建精确上游源码版本 `dsh-v0.1.2-rc.1` 的维护者。它采用失败即拒绝策略，不能应用于桌面应用包或其他 DSH 版本。具体源码构建步骤请见 [兼容补丁包](compat/dsh-0.1.2-rc.1/README.zh.md)。
+兼容补丁只适用于主动构建精确上游源码版本 `dsh-v0.1.6-alpha.2` 的维护者。它采用失败即拒绝策略，不能应用于桌面应用包或其他 DSH 版本。具体源码构建步骤请见 [兼容补丁包](compat/dsh-0.1.6-alpha.2/README.zh.md)。
 
 后续 DSH 版本若已提供所需能力，则无需使用此桥接。

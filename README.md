@@ -31,7 +31,7 @@ The published package README contains the same product overview for package cons
 
 ### Recommended: OpenBKN-compatible DSH Runtime
 
-For users of DSH `0.1.2-rc.1`, download the matching OpenBKN Runtime archive from the project releases. It contains the pinned DSH runtime, the version-fenced compatibility bridge, and the bkn-dsh plugin artifact. It uses DSH's native plugin manager on first start; it does not patch or change an existing DSH installation.
+For users of DSH `0.1.6-alpha.2`, download the matching OpenBKN Runtime archive from the project releases. It contains the pinned DSH runtime, the version-fenced compatibility bridge, and the bkn-dsh plugin artifact. It uses DSH's native plugin manager on first start; it does not patch or change an existing DSH installation.
 
 The only prerequisite is Node.js 20 or later. The release profile is created
 with DSH's native plugin manager at build time and is copied into the isolated
@@ -57,6 +57,6 @@ The runtime keeps its profile under an isolated OpenBKN DSH home (`OPENBKN_DSH_H
 
 ### Source-build path for DSH maintainers
 
-The compatibility package is for maintainers who intentionally build the exact upstream DSH source revision `dsh-v0.1.2-rc.1`. It is fail-closed and must not be applied to a desktop bundle or another DSH version. See [the compatibility package](compat/dsh-0.1.2-rc.1/README.md) for its exact source-build procedure.
+The compatibility package is for maintainers who intentionally build the exact upstream DSH source revision `dsh-v0.1.6-alpha.2`. It is fail-closed and must not be applied to a desktop bundle or another DSH version. See [the compatibility package](compat/dsh-0.1.6-alpha.2/README.md) for its exact source-build procedure.
 
 Later DSH releases that provide the required capabilities upstream do not need this bridge.

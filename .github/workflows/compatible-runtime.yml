@@ -35,7 +35,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Checkout pinned DSH source
-        run: git clone --depth 1 --branch dsh-v0.1.2-rc.1 https://github.com/deepseek-ai/deepseek-harness.git release/deepseek-harness
+        run: git clone --depth 1 --branch dsh-v0.1.6-alpha.2 https://github.com/deepseek-ai/deepseek-harness.git release/deepseek-harness
       - name: Point generator override at pinned DSH source
         run: node scripts/configure-pinned-dsh-generator.mjs --dsh release/deepseek-harness
       - name: Install bkn-dsh dependencies
@@ -48,9 +48,9 @@ jobs:
           pnpm --filter @openbkn/dsh-business-context build
           pnpm --filter @openbkn/dsh-business-context pack --pack-destination release/plugin
       - name: Prepare DSH-native Web profile
-        run: pnpm runtime:profile -- --runtime release/runtime --plugin release/plugin/openbkn-dsh-business-context-0.1.3.tgz --output release/profile
+        run: pnpm runtime:profile -- --runtime release/runtime --plugin release/plugin/openbkn-dsh-business-context-0.1.4.tgz --output release/profile
       - name: Package runtime archive
-        run: pnpm runtime:package -- --runtime release/runtime --profile release/profile --plugin release/plugin/openbkn-dsh-business-context-0.1.3.tgz --output release/artifacts --platform ${{ matrix.platform }}
+        run: pnpm runtime:package -- --runtime release/runtime --profile release/profile --plugin release/plugin/openbkn-dsh-business-context-0.1.4.tgz --output release/artifacts --platform ${{ matrix.platform }}
       - uses: actions/upload-artifact@v4
         with:
           name: openbkn-dsh-runtime-${{ matrix.platform }}
