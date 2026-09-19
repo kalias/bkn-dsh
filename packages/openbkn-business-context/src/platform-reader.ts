@@ -105,15 +105,15 @@ export class OpenBknPlatformReader {
       throw new PlatformReaderError('PLATFORM_UNAVAILABLE', 'OpenBKN platform data is temporarily unavailable.', { cause: error })
     }
     if (response.status === 401 || response.status === 403) {
-      // A 403 with the platform's permission_denied code is a deployment-level
-      // license/domain gate, not a caller-identity problem. Its body is a small
-      // JSON error envelope, so a bounded read cannot balloon here.
-      if (response.status === 403) {
-        const body = await response.text().catch(() => '')
-        const failure = body.length <= 4096 ? record(safeParse(body))?.error : undefined
-        if (string(record(failure)?.code) === 'permission_denied') {
-          throw new PlatformReaderError('LICENSE_REQUIRED', 'The requested OpenBKN capability requires an enterprise license for this business domain.')
-        }
+      // The observability routes answer a license/domain gate with
+      // permission_denied (403 for lifecycle scope, 401 when the caller's
+      // token class is not accepted there). Its body is a small JSON error
+      // envelope, so a bounded read cannot balloon here. Distinguish it from
+      // a real identity failure so the UI can explain the enterprise cap.
+      const body = await response.text().catch(() => '')
+      const failure = body.length <= 4096 ? record(safeParse(body))?.error : undefined
+      if (string(record(failure)?.code) === 'permission_denied') {
+        throw new PlatformReaderError('LICENSE_REQUIRED', 'The requested OpenBKN capability requires an enterprise license for this business domain.')
       }
       throw new PlatformReaderError('AUTHENTICATION_REQUIRED', 'OpenBKN authentication is required.')
     }

@@ -63,9 +63,18 @@ test('maps a 403 permission_denied domain gate to LICENSE_REQUIRED without expos
   await assert.rejects(reader.getInteractionOperations('int-1', AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'LICENSE_REQUIRED' && !error.message.includes('req-1'))
 })
 
-test('keeps non-permission 403 responses on AUTHENTICATION_REQUIRED', async () => {
+test('maps a 401 permission_denied OAuth-scope gate to LICENSE_REQUIRED too', async () => {
+  const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'integration-token' }, async () => response({
+    error: { code: 'permission_denied', message: '需要有效的 OAuth Bearer Token', required_action: 'request_authorization', request_id: 'req-2' },
+  }, 401))
+  await assert.rejects(reader.getInteractionOperations('int-1', AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'LICENSE_REQUIRED')
+})
+
+test('keeps non-permission 401/403 responses on AUTHENTICATION_REQUIRED', async () => {
   const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'token' }, async () => response({ error: { code: 'role_check_failed' } }, 403))
   await assert.rejects(reader.getInteractionOperations('int-1', AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'AUTHENTICATION_REQUIRED')
+  const unauthorized = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'token' }, async () => response({ detail: 'private diagnostics' }, 401))
+  await assert.rejects(unauthorized.listKnowledgeNetworks(AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'AUTHENTICATION_REQUIRED')
 })
 
 test('projects the license edition from bkn-safe capabilities', async () => {
