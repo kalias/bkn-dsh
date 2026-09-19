@@ -13,10 +13,29 @@ function pluginIsInProfile({ profile, packageName, version }) {
   const profileManifest = join(profile, 'package.json')
   const pluginManifest = join(profile, 'node_modules', ...packageName.split('/'), 'package.json')
   if (!existsSync(profileManifest) || !existsSync(pluginManifest)) return false
-  const profileJson = JSON.parse(readFileSync(profileManifest, 'utf8'))
-  const pluginJson = JSON.parse(readFileSync(pluginManifest, 'utf8'))
+  const profileJson = readManifest(profileManifest, 'profile manifest')
+  const pluginJson = readManifest(pluginManifest, 'plugin manifest')
   return pluginJson.version === version
     && profileJson.dsh?.profile?.bundles?.includes(packageName) === true
+}
+
+/**
+ * Parse one required manifest, failing closed with context. A corrupted
+ * manifest must abort the bootstrap (never be treated as "not installed",
+ * never let seeding overwrite an existing profile), but the raw SyntaxError
+ * alone would not say which file is broken.
+ */
+function readManifest(path, role) {
+  let parsed
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    throw new Error(`OpenBKN runtime ${role} is corrupted and must be repaired or removed before continuing: ${path} (${String(error)})`, { cause: error })
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`OpenBKN runtime ${role} is not a JSON object: ${path}`)
+  }
+  return parsed
 }
 
 /**

@@ -203,8 +203,8 @@ workflow 在打包前加入：compat apply/verify/revert 闭环、插件全量�
 
 - 事实确认：与审核同法的 win32 内存探针复现——JSON 转义形态与正斜杠形态清洗后构建根均残留。
 - 修改：新增共享契约 `prefixForms(prefix)`——平台原生、正斜杠、（含反斜杠时）双反斜杠转义三形态；`scrubAbsolutePaths` 与 `assertPortableBundle` 的机器前缀统一走该函数（此前检测侧的双变体逻辑一并收敛）。删除完整前缀不破坏剩余文本的转义配对，JSON 有效性天然保持。
-- 回归（与审核相同探针法）：转义形态 → `{"sources":["\x.ts"]}` 有效 JSON 且根已除；正斜杠形态 → `{"sources":["/x.ts"]}` 同样通过。产物级：macOS 重打包全链路复验（portability/`.bin/semver`/隔离 `--version`/归档 0 泄漏）。
-- 设计取舍（记录）：采用「完整前缀三形态删除」而非逐字段格式感知重写——source map 调试路径本就降级为相对残留，运行时代码/配置中的路径引用在 macOS 管线已验证不受损（全链路 E2E 通过）；若 Windows 真实构建发现需保留可解析引用的场景，再引入字段级处理。
+- 回归（与审核相同探针法）：转义形态的**序列化文本**清洗后为 `{"sources":["\\x.ts"]}`（文本中 x 前是两个反斜杠），JSON.parse 得到字符串 `\x.ts`，构建根已除；正斜杠形态序列化文本清洗后为 `{"sources":["/x.ts"]}`，同样可解析且根已除。产物级：macOS 重打包全链路复验（portability/`.bin/semver`/隔离 `--version`/归档 0 泄漏）。
+- 设计取舍（记录）：采用「完整前缀三形态删除」而非逐字段格式感知重写。注意清洗残留 `/x.ts`、`\x.ts` 均为去掉盘符/前缀后的 rooted 形态，**不是可移植的相对资源引用**——对本策略而言 source map 调试来源接受此降级；运行时代码/配置中的路径引用在 macOS 管线已验证不受损（全链路 E2E 通过）；若 Windows 真实构建发现需保留可解析引用的场景，再引入字段级处理。（本段为第五轮 N1 修正后的表述。）
 
 ## 6.3 unused-export（不成立，证据）
 
@@ -215,3 +215,36 @@ workflow 在打包前加入：compat apply/verify/revert 闭环、插件全量�
 - 插件 119/119、仓库 42/42、package:check（退出码 0）。
 - 重打包：portability 通过、`.bin/semver` → `1.2.3`、隔离 `--version` → `0.1.6-alpha.2`、归档 `/Users/kalias` 0 命中。
 - 未验证项（与审核第 7 节一致）：Windows 原生测试与 win32-x64 产物（F1/F2 的最终验收）、Windows `.cmd` 原生早退、GitHub Actions 在线、干净 checkout 全链路、强隔离跨机启动、本轮业务 E2E 未重跑（代码改动仅涉清洗/测试，插件运行时路径未变更）。
+
+---
+
+# 第五轮审核回应（2026-09-19-dsh-0.1.6-compat-review-round5.md）
+
+本轮审核结论为 F1/F2 代码层关闭、无新增 P1/P2。处置的三类事项如下。
+
+## N1 文档修正（已修）
+
+第四轮回应中两处失实已改正：① 清洗后示例的**序列化文本**明确为 `{"sources":["\\x.ts"]}`（x 前两个反斜杠），解析后字符串才是 `\x.ts`——原文单反斜杠形式按字面是非法 JSON；② `/x.ts`、`\x.ts` 修正表述为「去掉前缀后的 rooted 形态」，明确**不是**可移植相对引用，source map 调试来源接受该降级。代码不动（审核已确认生产探针合法）。
+
+## 第 7 节两项 STOP 门禁（已处置）
+
+1. **scoped-business-context.ts 双重断言**——按审核首选路径**消除**而非注释：实测 DSH `Session['snapshotEvents']`（`readonly SessionEvent[]`，各判别成员均含 `type: string` + `data`）与能力面 `DshSessionLog`（`snapshotEvents(): readonly SessionEventLike[]`）结构兼容，直接以 `agent.session` 传入即通过编译（build 双 face 通过），双重断言与其类型导入一并删除。无残留断言，无需 SAFETY 注释。
+2. **bootstrap 两处裸 JSON.parse**——保留失败关闭语义，补上下文与守卫：新增 `readManifest(path, role)`，解析异常包装为「manifest 损坏须修复或移除后重试」的错误（cause 保留），非对象顶层同样拒绝；新增 2 个损坏路径测试：
+   - 损坏的 home profile manifest → 上下文错误抛出，**原文件逐字节未动**（无种子覆盖）；
+   - 损坏的模板 manifest → 在创建任何 home 目录之前抛出（`existsSync(home) === false`）。
+   注：编写测试时发现真实控制流中，插件 manifest 缺席会先于 profile 解析短路——fixture 因此补齐插件 manifest 以真正到达解析路径（测试自身也修正了这一认知）。
+
+## N2 测试补强（已做）
+
+- `prefixForms` 固化为纯单测：Windows 盘符、UNC、无反斜杠折叠三组形态断言（跨平台可跑，无需 Windows）；
+- 清洗用例新增**清洗前门禁拒绤断言**（fixture 确实泄漏的直接证据），形成「先拒 → 清洗 → 解析 → 门禁通过」完整链路。
+- Windows symlink skip 计数记录：无 Windows 环境可执行，维持未验证声明（审核第 8 节第 1 条）。
+
+## 本轮验证汇总（均为本轮实际执行）
+
+- `pnpm --filter @openbkn/dsh-business-context test` → 119/119（退出码 0）；
+- `node --test tests/*.test.mjs compat/… runtime/…` → 45/45（含新增 prefixForms 1 + 损坏 manifest 2 + 清洗前断言强化；退出码 0）；
+- `pnpm run package:check` → 通过；
+- 重打包（bootstrap 变更入产物）：portability 检查通过；`.bin/semver` → `1.2.3`；隔离解压 `bin/dsh --version` → `0.1.6-alpha.2`；归档 `/Users/kalias` 0 命中。
+- 产物记录：`openbkn-dsh-runtime-0.1.6-alpha.2-openbkn.1-darwin-arm64.tar.gz`，SHA-256 `8add2f773fccc2650eec184e6e138951a39994d96e470619616b899b30655e72`，构建基线 `4272e2e`+本轮工作树（见下一条提交），平台 darwin-arm64。
+- 未验证项（不变）：Windows 原生、GitHub Actions 在线、干净 checkout 全链路、强隔离跨机、业务 E2E 本轮未重跑（运行时行为变更仅限 bootstrap 错误路径）。

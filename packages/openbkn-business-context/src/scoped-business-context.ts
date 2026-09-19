@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
-import { readDshSessionBusinessNetwork, type DshSessionLog } from './dsh-session-binding.js'
+import { readDshSessionBusinessNetwork } from './dsh-session-binding.js'
 import { buildManagedSessionPolicy } from './managed-session-policy.js'
 import type { NetworkCapabilityProfile } from './network-capability-profile.js'
 import type { PlatformReaderConfig } from './platform-reader.js'
@@ -53,7 +53,7 @@ const scopedPolicyPlugin = (binding: ReturnType<typeof readDshSessionBusinessNet
  * native DSH conversations keep their original tool catalogue.
  */
 export function mountBoundBusinessNetworkTool(agent: Agent, config: PlatformReaderConfig, profile?: NetworkCapabilityProfile): boolean {
-  const binding = readDshSessionBusinessNetwork(agent.session as unknown as DshSessionLog)
+  const binding = readDshSessionBusinessNetwork(agent.session)
   if (binding === undefined || normalizeBaseUrl(binding.platformBaseUrl) !== normalizeBaseUrl(config.baseUrl)) return false
   // This event fires before `agent/session-start`, but `Context.inject()` may
   // schedule a later fiber. The standard preset has already composed these

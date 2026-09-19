@@ -5,7 +5,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writ
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 
-import { assertPortableBundle, dereferenceSymlinks, scrubAbsolutePaths, stripInstallMetadata } from '../runtime/bundle-portability.mjs'
+import { assertPortableBundle, dereferenceSymlinks, prefixForms, scrubAbsolutePaths, stripInstallMetadata } from '../runtime/bundle-portability.mjs'
 
 function fresh(name) {
   const root = join(tmpdir(), `openbkn-portability-${name}-${process.pid}`)
@@ -197,6 +197,24 @@ test('in-bundle directory links pass scanning without EISDIR and keep their cont
   rmSync(home, { recursive: true, force: true })
 })
 
+test('prefixForms covers windows-native, forward-slash, and escaped serializations', () => {
+  const windows = prefixForms('C:' + String.fromCharCode(92) + 'Users' + String.fromCharCode(92) + 'builder')
+  const bs = String.fromCharCode(92) // backslash
+  assert.deepEqual([...windows].sort(), [
+    'C:/Users/builder',
+    'C:' + bs + bs + 'Users' + bs + bs + 'builder', // JSON/YAML escaped
+    'C:' + bs + 'Users' + bs + 'builder', // platform native
+  ].sort())
+  const unc = prefixForms(bs + bs + 'server' + bs + 'share')
+  assert.deepEqual([...unc].sort(), [
+    '//server/share',
+    bs + bs + bs + bs + 'server' + bs + bs + 'share',
+    bs + bs + 'server' + bs + 'share',
+  ].sort())
+  // no backslashes: every form collapses onto the native one
+  assert.deepEqual(prefixForms('/Users/build-machine'), ['/Users/build-machine'])
+})
+
 test('scrubs serialized build roots (native JSON, escaped, and forward forms) and keeps payloads valid', () => {
   const root = fresh('scrub')
   const home = fresh('scrub-home')
@@ -207,6 +225,9 @@ test('scrubs serialized build roots (native JSON, escaped, and forward forms) an
   // Tools that emit forward slashes on Windows.
   const forwardHome = home.split(sep).join('/')
   writeFileSync(join(root, 'b.map'), JSON.stringify({ sources: [`${forwardHome}/y.ts`] }))
+
+  // the gate rejects the tree BEFORE scrubbing (proves the fixtures really leak)
+  assert.throws(() => assertPortableBundle({ directory: root, home }), /build-machine path/)
 
   const scrubbed = scrubAbsolutePaths(root, [home])
   assert.deepEqual([...scrubbed].sort(), ['a.map', 'b.map'])
