@@ -15,7 +15,7 @@ export function runCheck(args) {
   const outputDirectory = valueAfter(args, '--output')
   const platform = valueAfter(args, '--platform')
   if (outputDirectory === undefined || platform === undefined) {
-    throw new Error('Usage: node scripts/check-runtime-portability.mjs --output <release-artifacts> --platform <darwin-arm64|darwin-x64|win32-x64>')
+    throw new Error('Usage: node scripts/check-runtime-portability.mjs --output <release-artifacts> --platform <darwin-arm64|win32-x64>')
   }
   const manifest = loadRuntimeManifest(new URL('../runtime/openbkn-dsh-runtime.manifest.json', import.meta.url))
   const archive = manifest.bundle.archives.find(entry => entry.platform === platform)

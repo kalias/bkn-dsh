@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 const commitPattern = /^[0-9a-f]{40}$/
 const digestPattern = /^[0-9a-f]{64}$/
 const bundleVersionPattern = /^0\.1\.6-alpha\.2-openbkn\.[1-9][0-9]*$/
-const platforms = new Set(['darwin-arm64', 'darwin-x64', 'win32-x64'])
+const platforms = new Set(['darwin-arm64', 'win32-x64'])
 
 function fail(message) {
   throw new Error(`Invalid compatible runtime manifest: ${message}`)

@@ -18,7 +18,7 @@
             "type": "object",
             "required": ["platform", "file"],
             "properties": {
-              "platform": { "enum": ["darwin-arm64", "darwin-x64", "win32-x64"] },
+              "platform": { "enum": ["darwin-arm64", "win32-x64"] },
               "file": { "pattern": "\\.(tar\\.gz|zip)$" }
             }
           }

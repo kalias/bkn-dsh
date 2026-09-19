@@ -8,7 +8,7 @@ test('loads one fully pinned compatible-runtime release manifest', () => {
 
   assert.equal(manifest.bundle.name, 'openbkn-dsh-runtime')
   assert.match(manifest.bundle.version, /^0\.1\.6-alpha\.2-openbkn\.\d+$/)
-  assert.deepEqual(manifest.bundle.archives.map((archive) => archive.platform), ['darwin-arm64', 'darwin-x64', 'win32-x64'])
+  assert.deepEqual(manifest.bundle.archives.map((archive) => archive.platform), ['darwin-arm64', 'win32-x64'])
   assert.equal(manifest.dsh.tag, "dsh-v0.1.6-alpha.2")
   assert.match(manifest.dsh.baseCommit, /^[0-9a-f]{40}$/)
   assert.match(manifest.plugin.packageName, /^@openbkn\//)

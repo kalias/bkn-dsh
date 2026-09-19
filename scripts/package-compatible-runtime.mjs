@@ -73,7 +73,7 @@ export function runPackageCompatibleRuntime(args, { packageRuntime = packageComp
   const outputDirectory = valueAfter(args, '--output')
   const platform = valueAfter(args, '--platform')
   if ([runtimeDirectory, profileDirectory, pluginTarball, outputDirectory, platform].some(value => value === undefined)) {
-    throw new Error('Usage: node scripts/package-compatible-runtime.mjs --runtime <runtime-directory> --profile <native-plugin-managed-web-profile> --plugin <plugin-tgz> --output <release-directory> --platform <darwin-arm64|darwin-x64|win32-x64>')
+    throw new Error('Usage: node scripts/package-compatible-runtime.mjs --runtime <runtime-directory> --profile <native-plugin-managed-web-profile> --plugin <plugin-tgz> --output <release-directory> --platform <darwin-arm64|win32-x64>')
   }
   const manifest = loadRuntimeManifest(new URL('../runtime/openbkn-dsh-runtime.manifest.json', import.meta.url))
   return packageRuntime({ runtimeDirectory, profileDirectory, pluginTarball, outputDirectory, platform, manifest })
