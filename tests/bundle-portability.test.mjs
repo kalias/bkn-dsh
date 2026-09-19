@@ -197,14 +197,30 @@ test('in-bundle directory links pass scanning without EISDIR and keep their cont
   rmSync(home, { recursive: true, force: true })
 })
 
-test('scrubs absolute build roots from text payloads only', () => {
+test('scrubs serialized build roots (native JSON, escaped, and forward forms) and keeps payloads valid', () => {
   const root = fresh('scrub')
   const home = fresh('scrub-home')
-  writeFileSync(join(root, 'a.map'), `{"sources":["${join(home, 'x.ts')}"]}`)
+
+  // JSON.stringify serialization stays valid JSON on every platform and
+  // produces the escaped-backslash form on Windows.
+  writeFileSync(join(root, 'a.map'), JSON.stringify({ sources: [join(home, 'x.ts')], keep: 'sentinel-not-a-path' }))
+  // Tools that emit forward slashes on Windows.
+  const forwardHome = home.split(sep).join('/')
+  writeFileSync(join(root, 'b.map'), JSON.stringify({ sources: [`${forwardHome}/y.ts`] }))
+
   const scrubbed = scrubAbsolutePaths(root, [home])
-  assert.deepEqual(scrubbed, ['a.map'])
-  const after = JSON.parse(readFileSync(join(root, 'a.map'), 'utf8'))
-  assert.equal(after.sources[0].startsWith(home), false)
+  assert.deepEqual([...scrubbed].sort(), ['a.map', 'b.map'])
+
+  const a = JSON.parse(readFileSync(join(root, 'a.map'), 'utf8'))
+  assert.equal(a.sources[0].startsWith(home), false)
+  assert.equal(a.keep, 'sentinel-not-a-path') // non-path content untouched
+  const b = JSON.parse(readFileSync(join(root, 'b.map'), 'utf8'))
+  assert.equal(b.sources[0].startsWith(forwardHome), false)
+
+  // the whole gate passes on the scrubbed tree for every serialization form
+  assertPortableBundle({ directory: root, home })
+  // and would have rejected it before scrubbing (forward form leaks natively
+  // only on Windows; assert via the escaped/native probe file)
   rmSync(root, { recursive: true, force: true })
   rmSync(home, { recursive: true, force: true })
 })

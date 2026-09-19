@@ -147,9 +147,22 @@ export function dereferenceSymlinks(root, sourceRoots = []) {
   return replaced
 }
 
+/**
+ * The serialization forms one build root can legitimately appear as inside
+ * text payloads: the platform-native separators, forward slashes (emitted by
+ * many tools on Windows), and JSON/YAML double-backslash escapes. Scrubbing
+ * and detection must share this contract or legal inputs leak past one while
+ * the other rejects them.
+ */
+export function prefixForms(prefix) {
+  const forms = new Set([prefix, prefix.split('\\').join('/')])
+  if (prefix.includes('\\')) forms.add(prefix.split('\\').join('\\\\'))
+  return [...forms]
+}
+
 /** Erase build-machine absolute path prefixes from text payloads in the bundle. */
 export function scrubAbsolutePaths(root, prefixes) {
-  const roots = prefixes.map(value => resolve(value)).filter(Boolean)
+  const roots = prefixes.map(value => resolve(value)).filter(Boolean).flatMap(prefixForms)
   const scrubbed = []
   for (const path of walkPlainFiles(root)) {
     const original = readTextIfTextual(path)
@@ -190,9 +203,7 @@ export function assertPortableBundle({ directory, home }) {
     }
   }
   const homeRoot = home === undefined ? undefined : resolve(home)
-  const machineRoots = homeRoot === undefined
-    ? []
-    : [...new Set([homeRoot, homeRoot.split(sep).join('/')])]
+  const machineRoots = homeRoot === undefined ? [] : prefixForms(homeRoot)
   for (const path of walkPlainFiles(root)) {
     const name = basename(path)
     const text = readTextIfTextual(path)

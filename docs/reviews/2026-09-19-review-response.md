@@ -186,3 +186,32 @@ workflow 在打包前加入：compat apply/verify/revert 闭环、插件全量�
 - 重打包（加固后管线）：portability 检查通过；产物 `bin/dsh` 含新守卫；`.bin/semver` → `1.2.3`；隔离解压 `--version` → `0.1.6-alpha.2`；归档 `/Users/kalias` 0 命中。
 - 未验证项：Windows 原生（T1 测试与 win32-x64 产物）、GitHub Actions 在线、跨物理机。
 - 遗留讨论：DSH 工作树既存修改（session/typert/lock/workspace）为上轮构建副产物，已由补丁系列完整描述，可直接 `git checkout -- .` 复原（本轮未动，留给用户确认）。
+
+---
+
+# 第四轮审核回应（2026-09-19-dsh-0.1.6-compat-review-round4.md）
+
+核实结论：**F1/F2 均属实**；6.3 的 unused-export 提示**不成立**（证据见下）。
+
+## F1 测试生成非法 JSON（已修复）
+
+- 事实确认：fixture 直接把 `join()` 结果插入 JSON 文本，Windows 原生路径经前缀删除后产生 `\x` 非法转义（与审核内存探针一致）。
+- 修改：`tests/bundle-portability.test.mjs` 清洗用例改用 `JSON.stringify` 序列化（双平台合法），并新增正斜杠形态第二个 fixture；断言「序列化 → 清洗 → 解析 → 门禁」全链路：两文件解析成功、sources 不再含构建根、非路径字段（sentinel）原样保留、清洗后整体 portability 检查通过。
+- 回归：10/10（macOS 实跑；Windows 原生仍未跑，未验证）。
+
+## F2 清洗与检测契约不一致（已修复）
+
+- 事实确认：与审核同法的 win32 内存探针复现——JSON 转义形态与正斜杠形态清洗后构建根均残留。
+- 修改：新增共享契约 `prefixForms(prefix)`——平台原生、正斜杠、（含反斜杠时）双反斜杠转义三形态；`scrubAbsolutePaths` 与 `assertPortableBundle` 的机器前缀统一走该函数（此前检测侧的双变体逻辑一并收敛）。删除完整前缀不破坏剩余文本的转义配对，JSON 有效性天然保持。
+- 回归（与审核相同探针法）：转义形态 → `{"sources":["\x.ts"]}` 有效 JSON 且根已除；正斜杠形态 → `{"sources":["/x.ts"]}` 同样通过。产物级：macOS 重打包全链路复验（portability/`.bin/semver`/隔离 `--version`/归档 0 泄漏）。
+- 设计取舍（记录）：采用「完整前缀三形态删除」而非逐字段格式感知重写——source map 调试路径本就降级为相对残留，运行时代码/配置中的路径引用在 macOS 管线已验证不受损（全链路 E2E 通过）；若 Windows 真实构建发现需保留可解析引用的场景，再引入字段级处理。
+
+## 6.3 unused-export（不成立，证据）
+
+`runtime/bootstrap-openbkn-plugin.mjs` 的 `pluginIsInstalled` 被 `tests/runtime-plugin-bootstrap.test.mjs` 导入并在 3 处断言（版本匹配/不匹配/缺席），导出为测试与潜在外部引导方所必需；诊断规则未计入测试消费。维持导出。
+
+## 本轮验证汇总
+
+- 插件 119/119、仓库 42/42、package:check（退出码 0）。
+- 重打包：portability 通过、`.bin/semver` → `1.2.3`、隔离 `--version` → `0.1.6-alpha.2`、归档 `/Users/kalias` 0 命中。
+- 未验证项（与审核第 7 节一致）：Windows 原生测试与 win32-x64 产物（F1/F2 的最终验收）、Windows `.cmd` 原生早退、GitHub Actions 在线、干净 checkout 全链路、强隔离跨机启动、本轮业务 E2E 未重跑（代码改动仅涉清洗/测试，插件运行时路径未变更）。
