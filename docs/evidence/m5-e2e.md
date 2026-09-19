@@ -35,3 +35,15 @@
 - DeepSeek API Key 仅通过环境变量 `DEEPSEEK_API_KEY` 注入 DSH 进程；OpenBKN Token 只存在于 DSH credentials 与 CLI 凭证存储，未写入任何 YAML/代码文件。
 - `~/.dsh/settings.yaml` 的 `agent-presets` 已从 `ptc` 改为 `standard`（备份：/tmp/settings.yaml.bak）。原因：dsh-v0.1.6-alpha.2 源码 dev 模式下 PTC 工具派发存在 `Cannot read properties of undefined (reading 'prepare')` 缺陷（工具调用必失败）；Runtime 分发路径同样以 Standard 模式验证通过。
 - `runtime/prepare-compatible-runtime.mjs` 有一段标注 LOCAL-ONLY 的 workaround（剔除 alpha 锁文件中 deploy 闭包未使用的 @electron/osx-sign 补丁行 + 非冻结安装），是本地 pnpm 11 构建所必需；是否保留由用户决定（CI 用 pnpm 10 不受影响，但 CI 对该 alpha 锁文件会报 patchedDependencies 配置不匹配——属上游需重新生成锁文件的问题）。
+
+## 修复跟进（提交 issue 后完成）
+- 上游 issue：openbkn-ai/bkn-dsh#22（已提）；kalias 已评论认领并推送修复分支 `feat/dsh-0.1.6-alpha.2-compat`（fork: kalias/bkn-dsh）。
+- 插件修复（已实测验证）：platform-reader 将 401/403 + `error.code=permission_denied` 分类为 `LICENSE_REQUIRED`；`getTurnProvenanceView` 抛 `openbkn/provenance-license-required`（含平台 license edition）；溯源面板据此渲染「业务溯源为企业版能力…升级并激活企业版权证后即可查看」提示（截图见会话记录）。117/117 测试通过。
+- 会话重载修复：compat 新增 0003-plugin-ignorable-session-events.patch（`Session.append` 非界面事件接受 `LogOnlyEventIntent`，写入侧桥接），系列补丁 0004 为 lockfile；修复前写入的会话日志已按帧结构手工补标记（备份 /tmp/session.v3.jsonl.zstd.bak），重启后 3 轮对话完整恢复。
+- 修复后的 Runtime 产物已重新构建（runtime:build → profile → package）并在 3082 端口实测。
+
+## 企业版实测（2026-09-19，用户升级企业版后）
+- 平台许可：`{"licensed":true,"edition":"enterprise","features":[...,"business_provenance"]}`。
+- **溯源面板全部打通**：执行溯源（6 个操作事实，含 Request/Trace/Receipt 全链路 id）、业务上下文图（企业投影渲染物料对象+属性+知识网络节点，RESOLVED）、证据链（DTO 未定义的占位，插件既有设计）。
+- 前置原因与最终修复：observability 路由要求请求携带 `x-business-domain` 头（企业版按域鉴权）。platform-reader 已补发该头（默认 bd_public，可由配置 businessDomain 覆盖），commit 28eea4c。
+- 环境备注：宿主通过 credentials 保险库取令牌，外部手动 `openbkn auth token` 刷新会使面板已同步令牌失效（测试期假象），重新打开面板即自动重同步。
