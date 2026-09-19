@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, readlinkSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 const scrubByteLimit = 64 * 1024 * 1024
@@ -7,6 +7,8 @@ const scrubByteLimit = 64 * 1024 * 1024
 // virtual-store dirs, build-time file: specifiers). The shipped bundle is
 // pre-installed and nothing runs pnpm against it, so these are removed.
 const installMetadataBasenames = new Set(['pnpm-lock.yaml', '.modules.yaml'])
+// file: followed by a rooted target: POSIX /, ../, Windows drive letter, or UNC.
+const fileReferencePattern = /file:(?:\/|\.\.|[A-Za-z]:[\\/]|\\\\)/
 const installMetadataPrefixes = ['.pnpm-workspace-state']
 
 function walkEntries(root) {
@@ -29,16 +31,24 @@ function walkFiles(root) {
 /** Decode as text unless the leading bytes look binary; hidden and multi-dot names included. */
 function readTextIfTextual(path) {
   const stat = statSync(path)
+  // A statSync here follows symlinks; directory links would fail readFileSync
+  // with EISDIR, so only regular files ever reach the decoder.
+  if (!stat.isFile()) return undefined
   if (stat.size > scrubByteLimit) return undefined
   const buffer = readFileSync(path)
   if (buffer.subarray(0, 8192).includes(0)) return undefined
   return buffer.toString('utf8')
 }
 
+/** Plain (non-symlink) files only — link entries are judged by link rules, never by following them. */
+function walkPlainFiles(root) {
+  return walkEntries(root).filter(entry => !entry.directory && !entry.symlink).map(entry => entry.path)
+}
+
 /** Remove pnpm install-time metadata so no build-machine layout survives in it. */
 export function stripInstallMetadata(root) {
   const removed = []
-  for (const path of walkFiles(root)) {
+  for (const path of walkPlainFiles(root)) {
     const name = basename(path)
     const insideVirtualStore = path.split(sep).includes('.pnpm')
     if (installMetadataBasenames.has(name)
@@ -57,6 +67,13 @@ function sourceMappings(sourceRoots) {
   return sourceRoots.map(entry => typeof entry === 'string'
     ? { source: realpathSync(resolve(entry)), into: '' }
     : { source: realpathSync(resolve(entry.source)), into: entry.into ?? '' })
+}
+
+/** True when a link's stored target string is an absolute path (POSIX, UNC, or drive letter). */
+function storedTargetIsAbsolute(target) {
+  return target.startsWith('/')
+    || target.startsWith('\\\\')
+    || /^[A-Za-z]:[\\/]/.test(target)
 }
 
 function mirrorsTarget(mappings, root, target) {
@@ -88,16 +105,25 @@ export function dereferenceSymlinks(root, sourceRoots = []) {
     const rel = relative(canonicalRoot, realpathSync(path))
     return rel !== '' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)
   }
-  // Loop to a fixed point: replacing one link can surface nested ones. Links
-  // that already resolve inside the bundle are portable and left untouched.
+  // Loop to a fixed point: replacing one link can surface nested ones. A link
+  // is portable only when its STORED target is relative AND resolves inside
+  // the bundle; an absolute target keeps working solely on the build machine.
   for (;;) {
     const links = walkEntries(root)
       .filter(entry => entry.symlink)
       .map(entry => entry.path)
-      .filter(path => !insideBundle(path))
+      .filter(path => storedTargetIsAbsolute(readlinkSync(path)) || !insideBundle(path))
     if (links.length === 0) break
     for (const path of links) {
       const target = realpathSync(path) // throws when dangling: fail closed
+      if (insideBundle(path)) {
+        // Absolute target that still resolves in-bundle: re-base it relative.
+        const linkTarget = relative(realpathSync(dirname(path)), target)
+        rmSync(path, { recursive: true, force: true })
+        symlinkSync(linkTarget, path, statSync(target).isDirectory() ? 'dir' : 'file')
+        replaced.push({ link: relative(root, path), target: linkTarget, kind: 'rebased-link' })
+        continue
+      }
       const mirrored = mirrorsTarget(mappings, root, target)
       if (mirrored !== undefined && existsSync(mirrored)) {
         const kind = statSync(mirrored).isDirectory() ? 'dir' : 'file'
@@ -125,7 +151,7 @@ export function dereferenceSymlinks(root, sourceRoots = []) {
 export function scrubAbsolutePaths(root, prefixes) {
   const roots = prefixes.map(value => resolve(value)).filter(Boolean)
   const scrubbed = []
-  for (const path of walkFiles(root)) {
+  for (const path of walkPlainFiles(root)) {
     const original = readTextIfTextual(path)
     if (original === undefined) continue
     let updated = original
@@ -152,22 +178,40 @@ export function assertPortableBundle({ directory, home }) {
   const violations = []
   for (const entry of walkEntries(root)) {
     if (!entry.symlink) continue
+    const stored = readlinkSync(entry.path)
+    if (storedTargetIsAbsolute(stored)) {
+      violations.push(`symlink with absolute stored target: ${relative(root, entry.path)} -> ${stored}`)
+      continue
+    }
     const target = realpathSync(entry.path)
     const rel = relative(root, target)
     if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
       violations.push(`symlink escapes the bundle: ${relative(root, entry.path)} -> ${target}`)
     }
   }
-  const machineRoots = home === undefined ? [] : [resolve(home)]
-  for (const path of walkFiles(root)) {
+  const homeRoot = home === undefined ? undefined : resolve(home)
+  const machineRoots = homeRoot === undefined
+    ? []
+    : [...new Set([homeRoot, homeRoot.split(sep).join('/')])]
+  for (const path of walkPlainFiles(root)) {
     const name = basename(path)
     const text = readTextIfTextual(path)
     if (text === undefined) continue
-    for (const prefix of machineRoots) {
-      if (text.includes(prefix)) violations.push(`build-machine path ${prefix} in ${relative(root, path)}`)
+    // JSON (and YAML double-quoted) payloads escape backslashes; scan the raw
+    // text plus an unescaped variant so C:\\Users\\... cannot hide.
+    const variants = text.includes('\\\\') ? [text, text.split('\\\\').join('\\')] : [text]
+    for (const variant of variants) {
+      for (const prefix of machineRoots) {
+        if (variant.includes(prefix)) violations.push(`build-machine path ${homeRoot} in ${relative(root, path)}`)
+      }
     }
     if (/\.(json|ya?ml|lock)$/.test(name)) {
-      if (/file:(\/|\.\.)/.test(text)) violations.push(`build-time file: reference in ${relative(root, path)}`)
+      for (const variant of variants) {
+        if (fileReferencePattern.test(variant)) {
+          violations.push(`build-time file: reference in ${relative(root, path)}`)
+          break
+        }
+      }
     }
   }
   if (violations.length > 0) {

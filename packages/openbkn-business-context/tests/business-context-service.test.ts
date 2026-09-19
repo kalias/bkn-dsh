@@ -548,3 +548,11 @@ test('refuses a requested network that is not visible to the current identity', 
     /not visible/i,
   )
 })
+
+test('provenance license decision covers unlicensed, licensed, and undetermined deployments', async () => {
+  const { provenanceLicenseDecision } = await import('../src/business-context-service.ts')
+  assert.deepEqual(provenanceLicenseDecision({ licensed: false, edition: 'community' }), { kind: 'license-required', edition: 'community' })
+  assert.deepEqual(provenanceLicenseDecision({ licensed: false }), { kind: 'license-required', edition: '' })
+  assert.deepEqual(provenanceLicenseDecision({ licensed: true, edition: 'enterprise' }), { kind: 'unavailable' })
+  assert.deepEqual(provenanceLicenseDecision(undefined), { kind: 'unavailable' })
+})

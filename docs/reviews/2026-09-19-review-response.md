@@ -136,3 +136,53 @@ workflow 在打包前加入：compat apply/verify/revert 闭环、插件全量�
 产物：`openbkn-dsh-runtime-0.1.6-alpha.2-openbkn.1-darwin-arm64.tar.gz` + `.sha256`（sha256 随构建生成于 release/，未入库）。
 未验证项：Windows 原生（R5 启动器、win32-x64 产物）、GitHub Actions 在线执行、跨物理机（以隔离目录+源树不可达路径近似）。
 遗留风险：sourcemap 路径清洗仍为前缀抹除（初审讨论项 2 维持）；CI 在线未实跑前，workflow 语法/步骤序为静态正确。
+
+---
+
+# 第三轮审核回应（2026-09-19-dsh-0.1.6-compat-review-round3.md）
+
+核实结论：**T1–T5 全部属实**。其中 T2 最严重——上轮守卫修复因 python 补丁在后续断言处中止而**从未写入**，而我用另写的公式测试冒充了验证（复审点名正确）。第 8 节两项 lint：一项属实已修，一项不成立（证据见下）。
+
+## T1 测试跨平台（已修复）
+
+- 修改：`tests/bundle-portability.test.mjs` 整体重写——home 用真实临时目录原生分隔符；逃逸链接指向独立临时目录内的真实文件（弃 `/etc/hosts`）；查找键改 `join()` 形态（`j('bin','tool')`、`endsWith(j('.bin','semver'))`）；所有 symlink 用例经 `canCreateSymlinks()` 探测，无权限平台显式 skip 而非失败；Windows 形态（盘符/UNC/转义）检测为纯文本正则，双平台可跑。
+- 回归：`node --test tests/bundle-portability.test.mjs` 10/10（macOS 实跑；Windows 原生仍未跑，声明为未验证）。
+
+## T2 实际守卫（已修复，并修正验证方法）
+
+- 事实确认：`bf5868c` 中两个启动器仍为旧条件；根因是修复补丁脚本在 windows 断言处抛出、未执行写入；上轮"7/7 边界"测试对象是手写公式。
+- 修改：两处守卫改为 `if(!((v[0]===22&&v[1]>=19)||v[0]>=24))` 拒绝式；导出 `launcher/windowsLauncher`。
+- 回归：`tests/launcher-node-guard.test.mjs` 3/3——**从生成的启动器文本中提取真实 `node -e` 脚本**，以伪 process 执行，两启动器 × 7 个边界版本（20.0/22.18/22.19/23.0/23.5/24.0/25.1）全部判定正确；Windows 早退两处以行尾 `||exit /b 1` 断言。产物级复核：重打包后 `bin/dsh` 内含新守卫（grep=1）。
+- 未验证：Windows 原生批处理行为。
+
+## T3 绝对存储目标（已修复）
+
+- 修改：`dereferenceSymlinks` 处理条件加入 `storedTargetIsAbsolute(readlinkSync(path))`（POSIX `/`、UNC `\\`、盘符）；解析在包内但存储为绝对的链接**重定位为相对**（新 `rebased-link` 分支）；`assertPortableBundle` 对绝对存储目标直接判违规。
+- 回归：新增负例「absolute-inside 被拒」「rebase 后通过」+ 目录链接 rebase 用例；产物 11 个链接全部为相对存储（检查通过即证明）。
+
+## T4 目录链接 EISDIR（已修复）
+
+- 修改：`readTextIfTextual` 增加 `stat.isFile()` 守卫；文本扫描/清洗改用 `walkPlainFiles`（跳过所有符号链接条目——链接由链接规则判定，目标内容在真实路径处被扫描，不跟随链接绕过逃逸检查）。
+- 回归：新增用例——包内目录链接经 rebase 后扫描不抛 EISDIR，目标目录内的泄漏仍被检出，清洗后通过。
+
+## T5 Windows 形态漏检（已修复）
+
+- 修改：`fileReferencePattern = /file:(?:\/|\.\.|[A-Za-z]:[\\/]|\\\\)/`（覆盖 `file:C:/`、`file:C:\`、UNC）；home 前缀同时匹配原生与正斜杠形态；文本含 `\\` 时额外扫描反转义变体（JSON/YAML 双反斜杠转义无法藏匿）。
+- 回归：单测覆盖五种形态（POSIX 绝对、`../`、`file:C:/`、`file:C:\\`、UNC）全部命中。
+- 未验证：Windows 真实归档（无 Windows 环境）。
+
+## 第 8 节 lint 两项
+
+- `provenance-view.ts:172` `operationRecords(...): unknown`——**属实**：返回未经校验的 `entries ?? operations`。已改为 `unknown[]` 并加 `Array.isArray` 守卫（非数组归一为 `[]`，下游投影天然安全）。
+- `scoped-business-context.ts:56`——**不成立（证据）**：该文件唯一 unknown 出现即第 56 行的双重类型断言 `as unknown as DshSessionLog`（表达式非返回值）；`readDshSessionBusinessNetwork` 返回 `BusinessNetworkBinding | undefined`、`buildManagedSessionPolicy` 返回具体 `ManagedSessionPolicy`、插件 `apply(ctx): void`——该调用链无 unknown 返回。仓库自有工具链无此规则可复现（诊断来自审核方 pi-lens，本环境不可用）。维持不改，如后续有可复现分析器输出再处置。
+
+## R8 补强（按第 5 节建议）
+
+- 决策逻辑抽取为导出的纯函数 `provenanceLicenseDecision(license)`，服务改用之；新增 4 情形断言：`licensed:false`+edition → license-required；`licensed:false` 无 edition → license-required(edition:'')；`licensed:true` → unavailable；capabilities 不可达（undefined）→ unavailable（不提示升级）。
+
+## 本轮验证汇总
+
+- 插件测试 119/119；仓库测试 42/42（portability 10 + launcher 3 + 既有 29）；`package:check` 通过（均退出码 0）。
+- 重打包（加固后管线）：portability 检查通过；产物 `bin/dsh` 含新守卫；`.bin/semver` → `1.2.3`；隔离解压 `--version` → `0.1.6-alpha.2`；归档 `/Users/kalias` 0 命中。
+- 未验证项：Windows 原生（T1 测试与 win32-x64 产物）、GitHub Actions 在线、跨物理机。
+- 遗留讨论：DSH 工作树既存修改（session/typert/lock/workspace）为上轮构建副产物，已由补丁系列完整描述，可直接 `git checkout -- .` 复原（本轮未动，留给用户确认）。

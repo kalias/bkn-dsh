@@ -49,10 +49,10 @@ function archiveFor(manifest, platform) {
   return archive
 }
 
-function launcher(plugin) {
+export function launcher(plugin) {
   return `#!/usr/bin/env sh
 set -eu
-node -e "const v=process.versions.node.split('.').map(Number);if(v[0]<22||(v[0]===22&&v[1]<19)){console.error('OpenBKN runtime requires Node ^22.19.0 || >=24.0.0 (current: '+process.versions.node+')');process.exit(1)}"
+node -e "const v=process.versions.node.split('.').map(Number);if(!((v[0]===22&&v[1]>=19)||v[0]>=24)){console.error('OpenBKN runtime requires Node ^22.19.0 || >=24.0.0 (current: '+process.versions.node+')');process.exit(1)}"
 bundle_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 : "\${OPENBKN_DSH_HOME:=\${XDG_DATA_HOME:-$HOME/.local/share}/openbkn-dsh}"
 export DSH_HOME="$OPENBKN_DSH_HOME"
@@ -64,10 +64,10 @@ exec node "$bundle_dir/runtime/node_modules/@deepseek-ai/dsh/lib/bin.js" "$@"
 `
 }
 
-function windowsLauncher(plugin) {
+export function windowsLauncher(plugin) {
   return `@echo off
 setlocal
-node -e "const v=process.versions.node.split('.').map(Number);if(v[0]<22||(v[0]===22&&v[1]<19)){console.error('OpenBKN runtime requires Node ^22.19.0 || >=24.0.0 (current: '+process.versions.node+')');process.exit(1)}"||exit /b 1
+node -e "const v=process.versions.node.split('.').map(Number);if(!((v[0]===22&&v[1]>=19)||v[0]>=24)){console.error('OpenBKN runtime requires Node ^22.19.0 || >=24.0.0 (current: '+process.versions.node+')');process.exit(1)}"||exit /b 1
 if "%OPENBKN_DSH_HOME%"=="" set "OPENBKN_DSH_HOME=%LOCALAPPDATA%\\OpenBKN\\dsh"
 set "DSH_HOME=%OPENBKN_DSH_HOME%"
 if "%~1"=="--help" goto run

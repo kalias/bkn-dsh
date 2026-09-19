@@ -184,21 +184,18 @@ export class OpenBknBusinessContextService extends TypertRemoteService {
         safeRunnerFailureCode(graph.reason),
       )
       if (safeRunnerFailureCode(core.reason) === 'LICENSE_REQUIRED' || safeRunnerFailureCode(graph.reason) === 'LICENSE_REQUIRED') {
-        // A permission_denied gate is only a license statement when the
-        // deployment is actually unlicensed; an enterprise deployment that
-        // still denies the read has a domain-authorization problem instead,
-        // and must not be told to upgrade.
         const license = await this.platformReader().getLicenseEdition(signal).then(
           value => value,
           () => undefined,
         )
-        if (license?.licensed !== false) {
+        const decision = provenanceLicenseDecision(license)
+        if (decision.kind === 'unavailable') {
           throw new Error('OpenBKN provenance records are unavailable for this interaction.')
         }
         throw new RemoteError(
           'openbkn/provenance-license-required',
           'Business provenance is an enterprise capability; the current deployment license does not include it.',
-          { edition: license?.edition ?? '' },
+          { edition: decision.edition },
         )
       }
       throw new Error('OpenBKN provenance records are unavailable for this interaction.')
@@ -449,6 +446,20 @@ export class OpenBknBusinessContextService extends TypertRemoteService {
     const managed = await this.ctx.credentials.resolve(ref)
     return managed?.value
   }
+}
+
+/**
+ * A permission_denied gate is only a license statement when the deployment is
+ * verifiably unlicensed; an enterprise deployment that still denies the read
+ * has a domain-authorization problem instead, and must not be told to upgrade.
+ * Capabilities being unreachable leaves the cause undetermined: report the
+ * generic unavailable failure rather than guessing an upgrade path.
+ */
+export function provenanceLicenseDecision(license: { edition?: string; licensed?: boolean } | undefined):
+  | { readonly kind: 'license-required'; readonly edition: string }
+  | { readonly kind: 'unavailable' } {
+  if (license === undefined || license.licensed !== false) return { kind: 'unavailable' }
+  return { kind: 'license-required', edition: license.edition ?? '' }
 }
 
 function safeRunnerFailureCode(error: unknown): string {

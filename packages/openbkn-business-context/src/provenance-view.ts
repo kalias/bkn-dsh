@@ -169,9 +169,10 @@ function records(value: unknown): readonly Record<string, unknown>[] {
 }
 
 /** Community deployments expose either `entries` or the documented `operations` list. */
-function operationRecords(value: unknown): unknown {
+function operationRecords(value: unknown): unknown[] {
   const response = record(value)
-  return response?.entries ?? response?.operations
+  const candidates = response?.entries ?? response?.operations
+  return Array.isArray(candidates) ? candidates : []
 }
 
 function stringValue(value: unknown): string | undefined {
