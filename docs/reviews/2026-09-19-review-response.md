@@ -75,3 +75,64 @@ workflow 在打包前加入：compat apply/verify/revert 闭环、插件全量�
 - compat 三补丁 apply/verify/revert 闭环 + pnpm 11.7 冻结安装 + DSH 完整构建通过；
 - Runtime 干净重建 → portability 检查通过 → 隔离目录启动（版本/web/自种子）通过；
 - 3082 端到端：会话重载、网络绑定徽章、企业版溯源面板完整读取（6 操作 + Receipt 链路）。
+
+---
+
+# 复审回应（2026-09-19-dsh-0.1.6-compat-re-review.md）
+
+逐条核实结论：**R1–R8 全部属实**（含对初审回应的两处不实陈述：R7 的「已还原 NOTICE」与「分支隔离」均未真正成立——根因是 amend 时 `git add -A` 把工作树其他改动扫入提交）。以下按复审要求的格式回应。
+
+## R1 CI 顺序（已修复）
+
+- 修改：`.github/workflows/compatible-runtime.yml` — 顺序改为 configure → frozen install → compat 闭环 → `runtime:build`（构建 DSH+generator）→ 插件测试/仓库测试/package:check → pack → profile → package → portability 检查。
+- 依据：插件构建 import `@deepseek-ai/dsh-typert-generator/tsdown`（其 exports 指向 `lib/`），只有 runtime:build 之后 lib 才存在；闭环步骤以 revert 结束不残留补丁。
+- 未验证项：在线 CI 实跑（GitHub Actions 未触发，无发布授权）；本地已按同序执行等价命令链。
+
+## R2 检查位于产物之前（已修复）
+
+- 修改：portability 检查移到 `Package runtime archive` 之后（扫描 assemble 产出的未打包目录）；upload 步骤仅在其后，检查失败即阻止上传。
+- 回归：`node scripts/check-runtime-portability.mjs --output release/artifacts --platform darwin-arm64` 退出码 0（产物存在时）；人为删除 bundle 目录复现「Assembled bundle directory not found」退出码 1（本轮排障期间实际发生并确认）。
+
+## R3 门禁漏检（已修复）
+
+- 修改：`runtime/bundle-portability.mjs` —
+  1. 文本识别改为 NUL 探测（覆盖隐藏文件 `.modules.yaml`、多点名 `client.terminal.js`、`lock.yaml`）；
+  2. `stripInstallMetadata`：移除 `pnpm-lock.yaml`、`.modules.yaml`、`.pnpm-workspace-state*` 及 `.pnpm/lock.yaml`（安装期元数据，产物为预装包，不发布构建机布局）——采纳复审「有依据地移除安装元数据」路径；
+  3. `file:` 引用检查覆盖 JSON 与 YAML（`file:(/|\.\.)`）；
+  4. 全部根路径经 `realpathSync` 规范化（macOS `/var`→`/private/var` 逃逸误报的根因）。
+- 回归：`tests/bundle-portability.test.mjs` 8/8（含隐藏文件、多点名、YAML file: 负例）；tar 级复检 `/Users/kalias` 0 命中、元数据 0 残留（复审列出的 7 个文件全部消除）。
+
+## R4 .bin 破坏（已修复，含两层根因）
+
+- 根因 1：Node `cpSync` 递归拷贝会把**相对符号链接重写为绝对路径**（实测：源 `../semver/bin/semver.js` → 拷贝后 `/Users/…/release/runtime/…`）；外层 `dereference:true` 又会把链接原地展开成文件副本破坏相对解析。
+- 根因 2：初版 mirrorsTarget 缺失「源根 → bundle 子目录」前缀映射，绝对化的 .bin 链接全部落入 copy 分支。
+- 修改：外层 cpSync 改为保留链接（verbatim）；sweep API 改为映射对 `{source, into}`（runtime→`runtime/`、profile→`profile-template/web/`），映射命中重建为**包内相对链接**（合法目标在源树外才拷贝，如 vendor）；已解析至包内的链接跳过（修复不动点循环把新建相对链接再转拷贝的自噬）。
+- 回归：单测 8/8 含新增「runtime 形状前缀映射」执行用例；产物实测 `node …/.bin/semver 1.2.3` → 输出 `1.2.3`（复审失败用例反向通过）；tar 含 11 个相对链接且 portability 检查通过；隔离目录 web 启动健康。
+
+## R5 Node 守卫（已修复）
+
+- 修改：条件改为 `((major===22&&minor>=19)||major>=24)`（Node 23 拒绝）；Windows `.cmd` 守卫与 bootstrap 行均加 `||exit /b 1` 早退。
+- 回归：边界表 20.0/22.18/22.19/23.0/23.5/24.0/25.1 全部判定正确（7/7）。未验证项：Windows 原生行为（无 Windows 环境，声明为未验证）。
+
+## R6 插件链非冻结（已修复）
+
+- 修改：CI `pnpm install --frozen-lockfile`；提交的 `pnpm-lock.yaml` 以 CI generator 路径（`release/deepseek-harness/...`）生成——本地已验证 CI 形态 `pnpm install --frozen-lockfile --lockfile-only` 退出码 0。
+- 权衡（记录）：本地开发用其它路径时需 `--no-frozen-lockfile`（会改写 lockfile 为本地路径，勿提交该 diff）。
+
+## R7 MCP 分支污染（已修复，修正先前不实陈述）
+
+- 事实：3d291b30cf 确实夹带 session/typert/lock/workspace/NOTICES 共 13 文件；初审回应「已还原 NOTICE」陈述错误。
+- 修改：分支重建为 `80f3b1b76b`——基于 tag、仅 `packages/mcp/**` 6 文件（+99/-4），THIRD_PARTY_NOTICES 与 lock/workspace 均为 tag 原状；spec 3/3 通过；已 force-with-lease 推送 fork。
+- 提交 ID：`80f3b1b76b`；文件清单：mcp-client 的 package.json/connection.ts/index.ts/transport.ts/tsconfig.json/tests/credential-headers.spec.ts。
+
+## R8 License 误报（已修复）
+
+- 修改：`platform-reader` 401 一律 `AUTHENTICATION_REQUIRED`（令牌失效类）；仅 403+permission_denied+observability 路由 → `LICENSE_REQUIRED`；`business-context-service` 在 LICENSE_REQUIRED 时查询 capabilities——`licensed !== false`（企业版已授权仍被拒=域授权问题）抛通用不可用错误，不提示升级 License。
+- 回归：插件测试 118/118（新增 401 反例；403 正例保留）；3082 实测企业版面板正常读取（6 操作+Receipt）。
+
+## 本轮验证汇总
+
+命令与退出码：插件测试 `pnpm --filter @openbkn/dsh-business-context test` 118/118（0）；仓库测试 `node --test tests/*.test.mjs compat/… runtime/…` 37/37（0）；`pnpm run package:check`（0）；portability 检查（0）；`.bin/semver` 执行（0，输出 1.2.3）；隔离 `bin/dsh --version`（0）与 `web --no-open` 3084 健康（401 鉴权响应）；tar 级泄漏扫描 0/0。
+产物：`openbkn-dsh-runtime-0.1.6-alpha.2-openbkn.1-darwin-arm64.tar.gz` + `.sha256`（sha256 随构建生成于 release/，未入库）。
+未验证项：Windows 原生（R5 启动器、win32-x64 产物）、GitHub Actions 在线执行、跨物理机（以隔离目录+源树不可达路径近似）。
+遗留风险：sourcemap 路径清洗仍为前缀抹除（初审讨论项 2 维持）；CI 在线未实跑前，workflow 语法/步骤序为静态正确。

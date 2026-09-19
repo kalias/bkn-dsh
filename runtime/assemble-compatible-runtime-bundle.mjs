@@ -3,7 +3,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
-import { dereferenceSymlinks, scrubAbsolutePaths } from './bundle-portability.mjs'
+import { dereferenceSymlinks, scrubAbsolutePaths, stripInstallMetadata } from './bundle-portability.mjs'
 
 const patchedDependencies = [
   '@deepseek-ai/dsh-mcp-client',
@@ -67,14 +67,14 @@ exec node "$bundle_dir/runtime/node_modules/@deepseek-ai/dsh/lib/bin.js" "$@"
 function windowsLauncher(plugin) {
   return `@echo off
 setlocal
-node -e "const v=process.versions.node.split('.').map(Number);if(v[0]<22||(v[0]===22&&v[1]<19)){console.error('OpenBKN runtime requires Node ^22.19.0 || >=24.0.0 (current: '+process.versions.node+')');process.exit(1)}"
+node -e "const v=process.versions.node.split('.').map(Number);if(v[0]<22||(v[0]===22&&v[1]<19)){console.error('OpenBKN runtime requires Node ^22.19.0 || >=24.0.0 (current: '+process.versions.node+')');process.exit(1)}"||exit /b 1
 if "%OPENBKN_DSH_HOME%"=="" set "OPENBKN_DSH_HOME=%LOCALAPPDATA%\\OpenBKN\\dsh"
 set "DSH_HOME=%OPENBKN_DSH_HOME%"
 if "%~1"=="--help" goto run
 if "%~1"=="-h" goto run
 if "%~1"=="-V" goto run
 if "%~1"=="--version" goto run
-node "%~dp0..\\bootstrap-openbkn-plugin.mjs" "%DSH_HOME%" "%~dp0..\\profile-template\\web" "${plugin.packageName}" "${plugin.version}"
+node "%~dp0..\\bootstrap-openbkn-plugin.mjs" "%DSH_HOME%" "%~dp0..\\profile-template\\web" "${plugin.packageName}" "${plugin.version}"||exit /b 1
 :run
 node "%~dp0..\\runtime\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js" %*
 `
@@ -100,16 +100,20 @@ export function assembleCompatibleRuntimeBundle({ runtimeDirectory, profileDirec
   const directory = join(output, basename(archive.file).replace(/\.(tar\.gz|zip)$/, ''))
   if (existsSync(directory)) throw new Error(`Compatible runtime bundle already exists: ${directory}`)
   mkdirSync(join(directory, 'bin'), { recursive: true })
-  cpSync(runtime, join(directory, 'runtime'), { recursive: true, dereference: true })
+  // keep symlinks verbatim: dereferencing here would copy .bin entries onto
+  // their link path and break scripts that resolve modules relative to their
+  // real location; the portability sweep below replaces links appropriately
+  cpSync(runtime, join(directory, 'runtime'), { recursive: true })
   mkdirSync(join(directory, 'plugins'), { recursive: true })
   cpSync(plugin, join(directory, 'plugins', manifest.plugin.artifact))
-  cpSync(profile, join(directory, 'profile-template', 'web'), { recursive: true, dereference: true })
+  cpSync(profile, join(directory, 'profile-template', 'web'), { recursive: true })
   cpSync(bootstrapSource, join(directory, 'bootstrap-openbkn-plugin.mjs'))
   // pnpm's deploy closure keeps absolute symlinks (vendor links, .bin entries)
   // and inline source maps keep build-machine paths; neither survives a move
   // to another machine, so replace links with real copies and erase the
   // build roots from text payloads before anything is archived.
-  dereferenceSymlinks(directory)
+  dereferenceSymlinks(directory, [{ source: runtime, into: 'runtime' }, { source: profile, into: join('profile-template', 'web') }])
+  stripInstallMetadata(directory)
   scrubAbsolutePaths(directory, [dirname(runtime), dirname(plugin), dirname(profile), homedir()])
   normalizeProfileDependency({ directory, manifest })
   writeFileSync(join(directory, 'runtime-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)

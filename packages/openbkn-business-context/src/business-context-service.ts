@@ -184,14 +184,21 @@ export class OpenBknBusinessContextService extends TypertRemoteService {
         safeRunnerFailureCode(graph.reason),
       )
       if (safeRunnerFailureCode(core.reason) === 'LICENSE_REQUIRED' || safeRunnerFailureCode(graph.reason) === 'LICENSE_REQUIRED') {
-        const edition = await this.platformReader().getLicenseEdition(signal).then(
-          value => value?.edition,
+        // A permission_denied gate is only a license statement when the
+        // deployment is actually unlicensed; an enterprise deployment that
+        // still denies the read has a domain-authorization problem instead,
+        // and must not be told to upgrade.
+        const license = await this.platformReader().getLicenseEdition(signal).then(
+          value => value,
           () => undefined,
         )
+        if (license?.licensed !== false) {
+          throw new Error('OpenBKN provenance records are unavailable for this interaction.')
+        }
         throw new RemoteError(
           'openbkn/provenance-license-required',
           'Business provenance is an enterprise capability; the current deployment license does not include it.',
-          { edition: edition ?? '' },
+          { edition: license?.edition ?? '' },
         )
       }
       throw new Error('OpenBKN provenance records are unavailable for this interaction.')

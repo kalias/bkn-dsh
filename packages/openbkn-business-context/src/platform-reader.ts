@@ -110,11 +110,16 @@ export class OpenBknPlatformReader {
       if (signal.aborted) throw new PlatformReaderError('REQUEST_ABORTED', 'OpenBKN context request was cancelled.', { cause: error })
       throw new PlatformReaderError('PLATFORM_UNAVAILABLE', 'OpenBKN platform data is temporarily unavailable.', { cause: error })
     }
-    if (response.status === 401 || response.status === 403) {
-      // Only the observability lifecycle routes answer a license/domain gate
-      // with permission_denied (403 for scope, 401 for a rejected token
-      // class); elsewhere that code means a caller-identity problem. The
-      // body is a small JSON error envelope, so a bounded read is safe.
+    if (response.status === 401) {
+      // 401 is a caller-identity problem (expired or rejected token class);
+      // the deployment-license gate answers 403 below.
+      throw new PlatformReaderError('AUTHENTICATION_REQUIRED', 'OpenBKN authentication is required.')
+    }
+    if (response.status === 403) {
+      // Only the observability lifecycle routes answer the deployment
+      // license/domain gate with permission_denied; elsewhere that code means
+      // a caller-authorization problem. The body is a small JSON error
+      // envelope, so a bounded read is safe.
       if (options?.licenseGated === true) {
         const body = await response.text().catch(() => '')
         const failure = body.length <= 4096 ? record(safeParse(body))?.error : undefined

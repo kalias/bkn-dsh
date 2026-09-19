@@ -64,11 +64,11 @@ test('maps a 403 permission_denied domain gate to LICENSE_REQUIRED without expos
   await assert.rejects(reader.getInteractionOperations('int-1', AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'LICENSE_REQUIRED' && !error.message.includes('req-1'))
 })
 
-test('maps a 401 permission_denied OAuth-scope gate to LICENSE_REQUIRED too', async () => {
+test('keeps a 401 permission_denied on observability routes an authentication failure', async () => {
   const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'integration-token' }, async () => response({
     error: { code: 'permission_denied', message: '需要有效的 OAuth Bearer Token', required_action: 'request_authorization', request_id: 'req-2' },
   }, 401))
-  await assert.rejects(reader.getInteractionOperations('int-1', AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'LICENSE_REQUIRED')
+  await assert.rejects(reader.getInteractionOperations('int-1', AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'AUTHENTICATION_REQUIRED')
 })
 
 test('keeps non-permission 401/403 responses on AUTHENTICATION_REQUIRED', async () => {

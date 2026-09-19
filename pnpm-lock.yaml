@@ -5,15 +5,15 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@deepseek-ai/dsh-typert-generator': link:../deepseek-harness/packages/typert/generator
+  '@deepseek-ai/dsh-typert-generator': link:release/deepseek-harness/packages/typert/generator
 
 importers:
 
   .:
     devDependencies:
       '@deepseek-ai/dsh-typert-generator':
-        specifier: link:../deepseek-harness/packages/typert/generator
-        version: link:../deepseek-harness/packages/typert/generator
+        specifier: link:release/deepseek-harness/packages/typert/generator
+        version: link:release/deepseek-harness/packages/typert/generator
       tsdown:
         specifier: ^0.22.2
         version: 0.22.14(tsx@4.23.13)(typescript@6.0.3)
