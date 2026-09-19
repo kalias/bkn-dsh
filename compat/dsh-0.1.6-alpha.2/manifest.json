@@ -8,25 +8,14 @@
   },
   "patches": [
     {
-      "file": "patches/0001-credential-backed-mcp-headers.patch",
-      "sha256": "6ccc0632752f90f8b64b757eb28b2494d07e65fe6b5bf472538824470f67ec56",
-      "files": [
-        "packages/mcp/mcp-client/package.json",
-        "packages/mcp/mcp-client/src/connection.ts",
-        "packages/mcp/mcp-client/src/index.ts",
-        "packages/mcp/mcp-client/src/transport.ts",
-        "packages/mcp/mcp-client/tsconfig.json"
-      ]
-    },
-    {
-      "file": "patches/0002-third-party-typert-protocol.patch",
+      "file": "patches/0001-third-party-typert-protocol.patch",
       "sha256": "32f4628286105dcad259723f6c2031c53907e9b5390e21e4ff695fe02a9802bb",
       "files": [
         "packages/typert/generator/src/analyzer.ts"
       ]
     },
     {
-      "file": "patches/0003-plugin-ignorable-session-events.patch",
+      "file": "patches/0002-plugin-ignorable-session-events.patch",
       "sha256": "14fa9a2ce95a69ee820e85534c2b1ba6da858c4587225a7671d4ff18286000ee",
       "files": [
         "packages/core/session/src/index.ts",
@@ -34,9 +23,10 @@
       ]
     },
     {
-      "file": "patches/0004-compatible-runtime-lockfile.patch",
-      "sha256": "4228ee2db1f14ac86b12d008ae781de215ebaf0f97c25582725b06b7508a06dd",
+      "file": "patches/0003-compatible-runtime-lockfile.patch",
+      "sha256": "887a3366648244622bd82c5a467edf22caf5eef698b6f74ff0ce506bd8f08f01",
       "files": [
+        "pnpm-workspace.yaml",
         "pnpm-lock.yaml"
       ]
     }

@@ -21,7 +21,7 @@ export interface DshSessionProvenanceLog {
 
 /** Real-DSH session surface used when a completed turn is committed. */
 export interface DshSessionProvenanceWriter extends DshSessionProvenanceLog {
-  append(type: typeof TURN_PROVENANCE_EVENT, data: SessionEventMap[typeof TURN_PROVENANCE_EVENT], options?: { readonly ignorable?: true }): unknown
+  append(type: typeof TURN_PROVENANCE_EVENT, data: SessionEventMap[typeof TURN_PROVENANCE_EVENT], options?: { readonly ignorable?: true }): void
 }
 
 /** Read one message's committed provenance directly from the append-only DSH log. */

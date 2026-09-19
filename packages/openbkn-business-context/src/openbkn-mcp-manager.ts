@@ -39,9 +39,12 @@ export class OpenBknMcpManager {
   }
 
   private async start(): Promise<void> {
-    // DSH 0.1.2's published MCP client has no `credentialHeaders` schema yet.
-    // Resolve at connection time only; the value never enters plugin profile
-    // configuration, session state, browser state, or prompts.
+    // The mount config keeps a literal Authorization header resolved fresh at
+    // connection time; the value never enters plugin profile configuration,
+    // session state, browser state, or prompts. Token rotation stays at this
+    // layer: refreshManagedMcpAtTurnStart re-mounts the client each turn and
+    // refresh() re-mounts on demand, so the mounted secret never outlives the
+    // credential it was resolved from.
     const token = await this.resolveToken()
     if (token === undefined || token.length === 0) {
       throw new Error('OpenBKN Context Loader MCP requires a configured token.')

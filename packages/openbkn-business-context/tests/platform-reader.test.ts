@@ -78,6 +78,13 @@ test('keeps non-permission 401/403 responses on AUTHENTICATION_REQUIRED', async 
   await assert.rejects(unauthorized.listKnowledgeNetworks(AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'AUTHENTICATION_REQUIRED')
 })
 
+test('keeps permission_denied on non-observability routes an authentication failure', async () => {
+  const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'token' }, async () => response({
+    error: { code: 'permission_denied', message: 'no access to this knowledge network', required_action: 'request_authorization' },
+  }, 403))
+  await assert.rejects(reader.listKnowledgeNetworks(AbortSignal.timeout(1_000)), (error: unknown) => error instanceof PlatformReaderError && error.code === 'AUTHENTICATION_REQUIRED')
+})
+
 test('projects the license edition from bkn-safe capabilities', async () => {
   const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'token' }, async () => response({ licensed: false, edition: 'community', capabilities: [], features: [] }))
   assert.deepEqual(await reader.getLicenseEdition(AbortSignal.timeout(1_000)), { edition: 'community', licensed: false })

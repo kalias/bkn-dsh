@@ -33,7 +33,7 @@ The published package README contains the same product overview for package cons
 
 For users of DSH `0.1.6-alpha.2`, download the matching OpenBKN Runtime archive from the project releases. It contains the pinned DSH runtime, the version-fenced compatibility bridge, and the bkn-dsh plugin artifact. It uses DSH's native plugin manager on first start; it does not patch or change an existing DSH installation.
 
-The only prerequisite is Node.js 20 or later. The release profile is created
+The only prerequisite is Node.js ^22.19.0 or >=24.0.0 (matching the pinned DSH release). The release profile is created
 with DSH's native plugin manager at build time and is copied into the isolated
 home on first start, so customers do not need `pnpm` or registry access.
 

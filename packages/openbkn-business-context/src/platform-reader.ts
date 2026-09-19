@@ -57,12 +57,12 @@ export class OpenBknPlatformReader {
   }
 
   async getInteractionOperations(interactionId: string, signal: AbortSignal, _cwd?: string): Promise<JsonValue> {
-    const value = await this.get(`/api/agent-observability/v1/interactions/${encodeURIComponent(interactionId)}/operations`, signal)
+    const value = await this.get(`/api/agent-observability/v1/interactions/${encodeURIComponent(interactionId)}/operations`, signal, { licenseGated: true })
     return this.admit(projectOperations(value))
   }
 
   async getInteractionBusinessGraph(interactionId: string, signal: AbortSignal, _cwd?: string): Promise<JsonValue> {
-    const value = await this.get(`/api/agent-observability/v1/interactions/${encodeURIComponent(interactionId)}/business-graph`, signal)
+    const value = await this.get(`/api/agent-observability/v1/interactions/${encodeURIComponent(interactionId)}/business-graph`, signal, { licenseGated: true })
     return this.admit(projectBusinessGraph(value))
   }
 
@@ -74,8 +74,8 @@ export class OpenBknPlatformReader {
     return { ...(edition === undefined ? {} : { edition }), ...(typeof source?.licensed === 'boolean' ? { licensed: source.licensed } : {}) }
   }
 
-  private async get(path: string, signal: AbortSignal): Promise<JsonValue> {
-    return await this.request(path, { method: 'GET' }, signal)
+  private async get(path: string, signal: AbortSignal, options?: { readonly licenseGated?: boolean }): Promise<JsonValue> {
+    return await this.request(path, { method: 'GET' }, signal, options)
   }
 
   private async post(path: string, body: Record<string, unknown>, signal: AbortSignal): Promise<JsonValue> {
@@ -86,7 +86,7 @@ export class OpenBknPlatformReader {
     }, signal)
   }
 
-  private async request(path: string, init: RequestInit, signal: AbortSignal): Promise<JsonValue> {
+  private async request(path: string, init: RequestInit, signal: AbortSignal, options?: { readonly licenseGated?: boolean }): Promise<JsonValue> {
     if (signal.aborted) throw new PlatformReaderError('REQUEST_ABORTED', 'OpenBKN context request was cancelled.')
     const url = fixedUrl(this.config.baseUrl, path, this.config.allowInsecureTls)
     const token = await this.config.resolveToken?.()
@@ -111,15 +111,16 @@ export class OpenBknPlatformReader {
       throw new PlatformReaderError('PLATFORM_UNAVAILABLE', 'OpenBKN platform data is temporarily unavailable.', { cause: error })
     }
     if (response.status === 401 || response.status === 403) {
-      // The observability routes answer a license/domain gate with
-      // permission_denied (403 for lifecycle scope, 401 when the caller's
-      // token class is not accepted there). Its body is a small JSON error
-      // envelope, so a bounded read cannot balloon here. Distinguish it from
-      // a real identity failure so the UI can explain the enterprise cap.
-      const body = await response.text().catch(() => '')
-      const failure = body.length <= 4096 ? record(safeParse(body))?.error : undefined
-      if (string(record(failure)?.code) === 'permission_denied') {
-        throw new PlatformReaderError('LICENSE_REQUIRED', 'The requested OpenBKN capability requires an enterprise license for this business domain.')
+      // Only the observability lifecycle routes answer a license/domain gate
+      // with permission_denied (403 for scope, 401 for a rejected token
+      // class); elsewhere that code means a caller-identity problem. The
+      // body is a small JSON error envelope, so a bounded read is safe.
+      if (options?.licenseGated === true) {
+        const body = await response.text().catch(() => '')
+        const failure = body.length <= 4096 ? record(safeParse(body))?.error : undefined
+        if (string(record(failure)?.code) === 'permission_denied') {
+          throw new PlatformReaderError('LICENSE_REQUIRED', 'The requested OpenBKN capability requires an enterprise license for this business domain.')
+        }
       }
       throw new PlatformReaderError('AUTHENTICATION_REQUIRED', 'OpenBKN authentication is required.')
     }

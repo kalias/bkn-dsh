@@ -11,9 +11,6 @@ Only a clean Git source checkout at commit `ddefc45fbc7f8e46dd73185e68295696d129
 The series adds only the capabilities required by the plugin and reproducible
 runtime build:
 
-- credential references for streamable HTTP MCP headers (rebased onto the
-  rewritten `packages/mcp/mcp-client` transport, which now imports
-  `@modelcontextprotocol/client` and `scrubbedParentEnv`);
 - recognition of the published Typert protocol in an external plugin
   (`packages/typert/generator/src/analyzer.ts`, `isTypeMetaSymbol`); without
   it the analyzer discovers 0 of the plugin's 10 public Remote methods;
@@ -22,7 +19,18 @@ runtime build:
   read side is native in `dsh-v0.1.6-alpha.2`, but without the write side a
   plugin-owned event is persisted as required and the stored session refuses
   to reload in any harness that lacks the plugin;
-- lockfile entries for the added source dependencies.
+- the release-lockfile pair: the upstream alpha lockfile is inconsistent with
+  its own `patchedDependencies` (an `@electron/osx-sign` entry the deploy
+  closure never uses, which pnpm 11 refuses), so the patch removes that
+  registration and carries the lockfile regenerated with pnpm 11.7 for a
+  frozen, repeatable install.
+
+The plugin deliberately does not use a credential-reference MCP header here:
+it mounts the MCP client with a literal Authorization header resolved at
+connection time and re-mounted per turn, which works on both patched and
+published `@deepseek-ai/dsh-mcp-client` builds. A DSH-side implementation of
+credential-backed MCP headers is kept as `kalias/deepseek-harness` branch
+`fix/mcp-credential-headers` for upstream contribution.
 
 It never reads or writes an OpenBKN token.
 

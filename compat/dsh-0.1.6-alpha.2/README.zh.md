@@ -8,9 +8,9 @@
 
 仅支持提交 `ddefc45fbc7f8e46dd73185e68295696d1297887`（tag `dsh-v0.1.6-alpha.2`）上干净的 DSH Git 源码工作树。不要用于桌面应用包、其他 DSH 版本或存在本地修改的工作树。
 
-补丁仅提供插件与可重复 Runtime 构建所需的能力：Streamable HTTP MCP 的凭证引用请求头（已按新版 `packages/mcp/mcp-client` 重写后的 transport 重新移植，新版改用 `@modelcontextprotocol/client` 与 `scrubbedParentEnv`）、外部插件的已发布 Typert 协议识别（`analyzer.ts` 的 `isTypeMetaSymbol`；缺失时插件 10 个公开 Remote 方法只能发现 0 个），以及新增源码依赖对应的 lockfile 条目。
+补丁仅提供插件与可重复 Runtime 构建所需的能力：外部插件的已发布 Typert 协议识别（`analyzer.ts` 的 `isTypeMetaSymbol`；缺失时插件 10 个公开 Remote 方法只能发现 0 个）、可忽略插件非界面会话记录的写入侧（alpha.2 的 `Session.append` 尚不接受非界面事件的 ignorable 标记，缺失时插件事件被按必需事件持久化、会话重启后无法加载；读取侧上游已原生支持），以及发布锁文件对：上游 alpha 锁文件与自身 `patchedDependencies` 不一致（含 deploy 闭包用不到的 `@electron/osx-sign` 注册，pnpm 11 会拒绝），补丁移除该注册并以 pnpm 11.7 重新生成锁文件，使安装可冻结、可重复。
 
-旧系列「可忽略插件非界面会话记录」补丁的读取侧已被上游原生支持（`SessionEvent.ignorable`，见 `packages/core/session/src/surface.ts`）；但 alpha.2 的 `Session.append` 尚不接受非界面事件的 ignorable 标记，插件写入的自定义事件会被持久层按必需事件拒绝，导致会话重启后无法加载——因此本系列保留写入侧桥接补丁（0003）。
+插件刻意不在此使用凭证引用式 MCP 请求头：它在挂载时解析 Token 传入字面 Authorization 头、每回合重新挂载轮换，兼容打补丁与已发布两种 `@deepseek-ai/dsh-mcp-client`。DSH 侧的凭证头实现保留在 `kalias/deepseek-harness` 的 `fix/mcp-credential-headers` 分支，供上游通道打开后贡献。
 
 本补丁不会读取或写入 OpenBKN Token。
 

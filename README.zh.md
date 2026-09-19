@@ -33,7 +33,7 @@ bkn-dsh 是一个增量式 DeepSeek Harness 插件。授权用户可为一个会
 
 对于 DSH `0.1.6-alpha.2` 用户，请从项目 Releases 下载匹配的 OpenBKN Runtime 压缩包。该包包含固定版本的 DSH Runtime、版本受限的兼容桥接以及 bkn-dsh 插件产物；首次启动时仍使用 DSH 原生插件管理器激活插件，不会修改已有 DSH 安装。
 
-唯一前置条件为 Node.js 20 或更高版本。发布 profile 在构建阶段由 DSH 原生插件管理器创建，首次启动时复制到隔离 Home；客户侧无需 `pnpm`，也不需要访问 npm registry。
+唯一前置条件为 Node.js ^22.19.0 或 >=24.0.0（与锁定的 DSH 版本一致）。发布 profile 在构建阶段由 DSH 原生插件管理器创建，首次启动时复制到隔离 Home；客户侧无需 `pnpm`，也不需要访问 npm registry。
 
 1. 在下载目录使用同目录的 `.sha256` 文件校验压缩包，然后解压：
 

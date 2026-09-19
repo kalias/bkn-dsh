@@ -1,6 +1,9 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs'
-import { basename, join, resolve } from 'node:path'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs'
+import { basename, dirname, join, relative, resolve } from 'node:path'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+
+import { dereferenceSymlinks, scrubAbsolutePaths } from './bundle-portability.mjs'
 
 const patchedDependencies = [
   '@deepseek-ai/dsh-mcp-client',
@@ -13,6 +16,33 @@ function assertFile(path, message) {
   if (!existsSync(path)) throw new Error(message)
 }
 
+/** The bundled profile is pre-installed; keep only the registry-style pin. */
+function normalizeProfileDependency({ directory, manifest }) {
+  const template = join(directory, 'profile-template')
+  const manifests = [join(template, 'web', 'package.json')]
+  // DSH's plugin manager records a file: dependency wherever it touched a
+  // package.json (the live profile and any seeded home copy).
+  const collect = current => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      if (entry.name === 'node_modules') continue
+      const path = join(current, entry.name)
+      const manifestPath = join(path, 'package.json')
+      if (entry.isDirectory() && existsSync(manifestPath)) manifests.push(manifestPath)
+      collect(path)
+    }
+  }
+  collect(template)
+  for (const path of manifests.filter(existsSync)) {
+    const parsed = JSON.parse(readFileSync(path, 'utf8'))
+    if (parsed.dependencies?.[manifest.plugin.packageName] === undefined) continue
+    if (parsed.dependencies[manifest.plugin.packageName] !== manifest.plugin.version) {
+      parsed.dependencies[manifest.plugin.packageName] = manifest.plugin.version
+      writeFileSync(path, `${JSON.stringify(parsed, null, 2)}\n`)
+    }
+  }
+}
+
 function archiveFor(manifest, platform) {
   const archive = manifest?.bundle?.archives?.find((entry) => entry.platform === platform)
   if (archive === undefined) throw new Error(`Compatible runtime manifest does not support ${platform}.`)
@@ -22,6 +52,7 @@ function archiveFor(manifest, platform) {
 function launcher(plugin) {
   return `#!/usr/bin/env sh
 set -eu
+node -e "const v=process.versions.node.split('.').map(Number);if(v[0]<22||(v[0]===22&&v[1]<19)){console.error('OpenBKN runtime requires Node ^22.19.0 || >=24.0.0 (current: '+process.versions.node+')');process.exit(1)}"
 bundle_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 : "\${OPENBKN_DSH_HOME:=\${XDG_DATA_HOME:-$HOME/.local/share}/openbkn-dsh}"
 export DSH_HOME="$OPENBKN_DSH_HOME"
@@ -36,6 +67,7 @@ exec node "$bundle_dir/runtime/node_modules/@deepseek-ai/dsh/lib/bin.js" "$@"
 function windowsLauncher(plugin) {
   return `@echo off
 setlocal
+node -e "const v=process.versions.node.split('.').map(Number);if(v[0]<22||(v[0]===22&&v[1]<19)){console.error('OpenBKN runtime requires Node ^22.19.0 || >=24.0.0 (current: '+process.versions.node+')');process.exit(1)}"
 if "%OPENBKN_DSH_HOME%"=="" set "OPENBKN_DSH_HOME=%LOCALAPPDATA%\\OpenBKN\\dsh"
 set "DSH_HOME=%OPENBKN_DSH_HOME%"
 if "%~1"=="--help" goto run
@@ -73,6 +105,13 @@ export function assembleCompatibleRuntimeBundle({ runtimeDirectory, profileDirec
   cpSync(plugin, join(directory, 'plugins', manifest.plugin.artifact))
   cpSync(profile, join(directory, 'profile-template', 'web'), { recursive: true, dereference: true })
   cpSync(bootstrapSource, join(directory, 'bootstrap-openbkn-plugin.mjs'))
+  // pnpm's deploy closure keeps absolute symlinks (vendor links, .bin entries)
+  // and inline source maps keep build-machine paths; neither survives a move
+  // to another machine, so replace links with real copies and erase the
+  // build roots from text payloads before anything is archived.
+  dereferenceSymlinks(directory)
+  scrubAbsolutePaths(directory, [dirname(runtime), dirname(plugin), dirname(profile), homedir()])
+  normalizeProfileDependency({ directory, manifest })
   writeFileSync(join(directory, 'runtime-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
   const launcherPath = join(directory, 'bin', 'dsh')
   writeFileSync(launcherPath, launcher(manifest.plugin))

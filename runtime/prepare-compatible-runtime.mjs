@@ -1,7 +1,7 @@
 import { applyCompatibility, loadManifest } from '../compat/dsh-0.1.6-alpha.2/apply.mjs'
 import { verifyCompatibility } from '../compat/dsh-0.1.6-alpha.2/verify.mjs'
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 
 /**
@@ -40,17 +40,7 @@ export function buildCompatibleRuntime({ outputDirectory, run = defaultRun, ...o
   }
 
   const prepared = prepareCompatibleRuntimeSource(options)
-  // LOCAL-ONLY workaround (remove after upstream regenerates its lockfile with
-  // pnpm 11): the alpha lockfile's patchedDependencies list an @electron/osx-sign
-  // entry the deploy closure never uses, and pnpm 11 aborts on it.
-  const workspaceFile = join(target, 'pnpm-workspace.yaml')
-  const workspaceText = readFileSync(workspaceFile, 'utf8')
-  const cleanedWorkspace = workspaceText
-    .split('\n')
-    .filter(line => !line.includes("'@electron/osx-sign@1.3.3'"))
-    .join('\n')
-  if (cleanedWorkspace !== workspaceText) writeFileSync(workspaceFile, cleanedWorkspace)
-  run(pnpmCommand(), ['install', '--no-frozen-lockfile'], { cwd: target })
+  run(pnpmCommand(), ['install', '--frozen-lockfile'], { cwd: target })
   run(pnpmCommand(), ['run', 'build'], { cwd: target })
   run(pnpmCommand(), [
     '--filter',

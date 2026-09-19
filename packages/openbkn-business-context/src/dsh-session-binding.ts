@@ -22,7 +22,7 @@ export interface DshSessionLog {
 
 /** DSH Session capability surface needed when a new binding is persisted. */
 export interface DshSessionBindingLog extends DshSessionLog {
-  append(type: typeof BUSINESS_NETWORK_BOUND_EVENT, data: SessionEventMap[typeof BUSINESS_NETWORK_BOUND_EVENT], options?: { readonly ignorable?: true }): unknown
+  append(type: typeof BUSINESS_NETWORK_BOUND_EVENT, data: SessionEventMap[typeof BUSINESS_NETWORK_BOUND_EVENT], options?: { readonly ignorable?: true }): void
 }
 
 /** Recover the binding directly from DSH's append-only session log. */

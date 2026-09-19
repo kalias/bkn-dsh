@@ -9,4 +9,4 @@
    - 或以 @openbkn scope 发布 npm（需 npm org 凭证；`repository` 字段已指回本仓库，收录自动关联下载量）。
 2. **GitHub topic**：给 openbkn-ai/bkn-dsh 加 `dsh-plugin` topic（需 org 管理权限；CLI 侧 kalias 对该仓库只有 pull 权限）。
 
-另请知悉：插件依赖 compat 兼容系列（三项上游缺失能力），**需配合 OpenBKN Runtime 使用**——描述中已如实注明；三项修复已向上游 deepseek-ai/deepseek-harness 准备好分支（见 docs/evidence/m5-e2e.md），但其 GitHub 为只读镜像（issues/PR 均禁用），无法直接贡献。
+另请知悉：插件依赖 compat 兼容系列（typert 外部协议识别、ignorable 会话事件写入侧、发布锁文件对），**需配合 OpenBKN Runtime 使用**——描述中已如实注明；DSH 侧修复分支存于 kalias/deepseek-harness（上游 GitHub 为只读镜像、issues/PR 均禁用，通道打开即可贡献）。
