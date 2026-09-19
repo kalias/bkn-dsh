@@ -14,12 +14,13 @@ test('uses fixed Host routes and keeps the credential out of payloads', async ()
     requests.push({ url, init })
     return response({ entries: [{ id: 'supply_ontology_hand', name: 'Supply' }] })
   }
-  const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081/', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, resolveToken: async () => 'managed-token' }, fetcher)
+  const reader = new OpenBknPlatformReader({ baseUrl: 'http://localhost:8081/', requestTimeoutMs: 1_000, maxResultBytes: 1024, allowInsecureTls: false, businessDomain: 'bd_public', resolveToken: async () => 'managed-token' }, fetcher)
 
   assert.deepEqual(await reader.listKnowledgeNetworks(AbortSignal.timeout(1_000)), { entries: [{ id: 'supply_ontology_hand', name: 'Supply' }] })
   assert.equal(requests[0].url.pathname, '/api/bkn-backend/v1/knowledge-networks')
   assert.equal(requests[0].url.searchParams.get('limit'), '100')
   assert.equal(new Headers(requests[0].init.headers).get('authorization'), 'Bearer managed-token')
+  assert.equal(new Headers(requests[0].init.headers).get('x-business-domain'), 'bd_public')
   assert.equal(String(requests[0].init.body).includes('managed-token'), false)
 })
 

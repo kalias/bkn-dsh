@@ -24,6 +24,8 @@ export interface PlatformReaderConfig {
   /** Maximum projected payload sent from Host to the DSH browser. */
   readonly maxResultBytes: number
   readonly allowInsecureTls: boolean
+  /** Business domain header sent on platform requests; defaults to the platform default `bd_public`. */
+  readonly businessDomain?: string
   readonly resolveToken?: () => Promise<string | undefined>
 }
 
@@ -97,7 +99,11 @@ export class OpenBknPlatformReader {
     try {
       response = await this.fetcher(url, {
         ...init,
-        headers: { ...init.headers, authorization: `Bearer ${token}` },
+        headers: {
+          ...init.headers,
+          'x-business-domain': this.config.businessDomain?.trim() || 'bd_public',
+          authorization: `Bearer ${token}`,
+        },
         signal: requestSignal,
       })
     } catch (error: unknown) {
