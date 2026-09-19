@@ -1,0 +1,8 @@
+# Ready-to-file submission for https://github.com/awesome-dsh-plugin/awesome-dsh-plugin
+# Copy to <fork>/data/plugins/openbkn-ai__bkn-dsh.yml and open a PR (one file = the whole submission).
+url: https://github.com/openbkn-ai/bkn-dsh
+name: openbkn-ai/bkn-dsh
+category: tools
+description:
+  en: "Business knowledge-network context for DeepSeek Harness: bind a session to an OpenBKN knowledge network, query its objects and metrics through managed MCP tools, and open trace-backed provenance (execution facts and a business graph) for each answer. Ships with the OpenBKN Runtime; the provenance views need an OpenBKN enterprise license."
+  zh: "为 DeepSeek Harness 提供业务知识网络上下文：将会话绑定到 OpenBKN 知识网络，通过受管 MCP 工具查询对象与指标，并为每轮回答打开可溯源的执行事实与业务上下文图。随 OpenBKN Runtime 发布；溯源视图需企业版 License。"
