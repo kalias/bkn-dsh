@@ -20,8 +20,18 @@ export function runBuildCompatibleRuntime(args, { build = buildCompatibleRuntime
   }
   const releaseManifest = loadRuntimeManifest(new URL('../runtime/openbkn-dsh-runtime.manifest.json', import.meta.url))
   const packageDirectory = resolve(repository, releaseManifest.compatibility.directory)
-  const compatibilityManifest = JSON.parse(readFileSync(resolve(packageDirectory, 'manifest.json'), 'utf8'))
+  const compatibilityManifest = readCompatibilityManifest(resolve(packageDirectory, 'manifest.json'))
   return build({ target, outputDirectory, releaseManifest, compatibilityManifest, packageDirectory })
+}
+
+export function readCompatibilityManifest(path) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    // Fail fast, but say which step and which file died — a bare SyntaxError
+    // from deep inside the build tells the operator nothing actionable.
+    throw new Error(`Compatibility manifest is not valid JSON; fix or regenerate ${path} before building. (${String(error)})`, { cause: error })
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

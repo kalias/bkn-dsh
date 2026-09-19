@@ -248,3 +248,37 @@ workflow 在打包前加入：compat apply/verify/revert 闭环、插件全量�
 - 重打包（bootstrap 变更入产物）：portability 检查通过；`.bin/semver` → `1.2.3`；隔离解压 `bin/dsh --version` → `0.1.6-alpha.2`；归档 `/Users/kalias` 0 命中。
 - 产物记录：`openbkn-dsh-runtime-0.1.6-alpha.2-openbkn.1-darwin-arm64.tar.gz`，SHA-256 `8add2f773fccc2650eec184e6e138951a39994d96e470619616b899b30655e72`，构建基线 `4272e2e`+本轮工作树（见下一条提交），平台 darwin-arm64。
 - 未验证项（不变）：Windows 原生、GitHub Actions 在线、干净 checkout 全链路、强隔离跨机、业务 E2E 本轮未重跑（运行时行为变更仅限 bootstrap 错误路径）。
+
+---
+
+# 第六轮审核回应（2026-09-19-dsh-0.1.6-compat-review-round6.md）
+
+本轮审核确认第五轮全部处置通过独立验证，无新增 P1/P2。移交事项处置如下。
+
+## 第 4 节两条 STOP（构建脚本裸 JSON.parse）——已按「上下文包装」路径处置
+
+均为开发者 CLI 场景，选择与 bootstrap 同款模式（失败仍中止，但错误说明哪一步、哪个文件），不做吞错、不申请豁免：
+
+1. `scripts/build-compatible-runtime.mjs` — 抽取 `readCompatibilityManifest(path)`：损坏 manifest 抛「Compatibility manifest is not valid JSON; fix or regenerate <path> before building」，cause 保留 SyntaxError。
+2. `scripts/package-bundle.mjs` — 抽取 `parsePackManifest(raw, cwd)`：pnpm 非预期输出抛「output is not the expected JSON manifest; run it manually in <cwd> to inspect what pnpm printed」，cause 保留。
+
+两个 helper 均导出并新增负例测试（`tests/build-script-manifest-errors.test.mjs`，3/3）：
+- 损坏 compatibility manifest → 错误含文件路径、cause 为 SyntaxError；
+- pnpm 输出为普通告警文本 → 错误含检查目录指引、cause 为 SyntaxError；
+- 合法输入仍正常解析。
+
+CLI 行为复核：`package:check` 通过（退出码 0，审计输出不变）；`build-compatible-runtime.mjs` 无参调用仍打印 Usage 且**退出码 1**（fail-fast 未被包装改变）。
+
+另核实本轮 advisory：`dsh-session-binding.ts:25` 现为 `append(...): void`，文件内 `: unknown` 出现 0 次——确系早期轮次缓存，无需处理（与审核结论一致）。
+
+## 本轮验证（实际执行）
+
+- `node --test tests/*.test.mjs compat/… runtime/…` → **48/48**（退出码 0，含新增 3 项）；
+- `pnpm --filter @openbkn/dsh-business-context test` → 119/119（退出码 0）；
+- `pnpm run package:check` → 通过（退出码 0）；
+- `node scripts/build-compatible-runtime.mjs`（无参）→ Usage + 退出码 1（fail-fast 保持）。
+- 产物未重建：本轮改动仅涉开发者脚本与测试，不进入发布归档（bootstrap/assemble/portability 均未触碰）；当前有效产物仍为 SHA-256 `8add2f77…55e72`（基线 282561f，round6 已核验）。
+
+## 未验证项（不变，round6 第 6 节）
+
+Windows 原生、`.cmd` 原生早退、win32-x64 打包、GitHub Actions 在线、干净 checkout 全链路、强隔离跨机、业务 E2E。静态门禁侧：本轮两条 STOP 已关闭；如后续诊断再出新定位，按「先核实再处置」流程办理。

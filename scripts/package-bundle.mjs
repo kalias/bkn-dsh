@@ -18,8 +18,18 @@ const forbidden = [
 ]
 
 if (!existsSync(packageDirectory)) throw new Error(`Package directory is missing: ${packageDirectory}`)
+export function parsePackManifest(raw, cwd) {
+  try {
+    return JSON.parse(raw)
+  } catch (error) {
+    // pnpm emitting anything other than the promised JSON (warnings, prompts,
+    // registry errors) must abort the audit, not be mistaken for a manifest.
+    throw new Error(`pnpm pack --dry-run output is not the expected JSON manifest; run it manually in ${cwd} to inspect what pnpm printed. (${String(error)})`, { cause: error })
+  }
+}
+
 const raw = execFileSync('pnpm', ['pack', '--dry-run', '--json'], { cwd: packageDirectory, encoding: 'utf8' })
-const packed = JSON.parse(raw)
+const packed = parsePackManifest(raw, packageDirectory)
 if (!Array.isArray(packed.files)) throw new Error('pnpm pack did not return a file manifest.')
 const paths = packed.files.map(file => file.path)
 for (const path of required) {
