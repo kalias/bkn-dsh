@@ -415,3 +415,58 @@ run#10 基线即当前 HEAD（`1b8d8a3`），双平台绿。
 - 本机负例证明 3 组（见 F1）；本地回归 49/49 + 119/119 + package:check（每次推送前）；
 - run#10 双平台 success：win 119/119+49/49+冒烟 `0.1.6-alpha.2`（.cmd 路径）；mac 同计数+冒烟；
 - run#7（profile 失败）/run#8（MSYS）/run#9（正斜杠）三次失败均为修复引入点的真实回归，bash 门禁下即时暴露——门禁有效性本身获得三轮负例级验证。
+
+---
+
+# 第九轮回应（round9：N1–N8 / R1–R2，2026-09-20）
+
+核实结论：**N1–N8、R1、R2 全部属实**（N1/N2/N3/N6 经源码逐行确认；N7 的矛盾正是我第八轮回应与注释自相矛盾处）。全部处置如下。
+
+## N1（P1，合入前项）MCP 端点围栏——已修
+
+- 抽共享函数 `assertHttpsEndpoint`（platform-reader 的 fixedUrl 判定泛化，供两条出站路径共用）+ `isLoopbackHost` 导出；
+- `resolveMcpUrl(config)` 签名扩展接受 `allowInsecureTls`：显式 mcpUrl 先过 scheme 围栏（非 loopback 强制 https，`allowInsecureTls` 才放行 http），再加 **origin 围栏**（`url.origin === base.origin` 或双侧 loopback），否则抛错并明示拒绝发送凭证到该 origin；
+- 单测 6 项（mcp-endpoint-fence.test.ts）：默认路由 / 同 origin https / loopback 对 / 非 loopback http 拒 / 跨 origin 拒 / insecure 开关放行非 loopback http（默认拒）；
+- **契约变更波及旧测试**：原「honours an explicitly configured endpoint」用例用的恰是跨 origin override（`mcp.example` vs `platform.example`）——即审核指出的不安全面，已改为同 origin 形态（断言未弱化，语义按新契约收紧）。
+
+## N2（P2）响应体流式上限——已修
+
+`request()` 改用 `readCappedBody(response, cap)`：经 `response.body.getReader()` 逐块累计，超限即 `reader.cancel()` 并抛 `OUTPUT_OVERFLOW`（流被中止而非抽干）。单测：无 content-length 的 9MB 单块流 → `OUTPUT_OVERFLOW` 且 `cancelled === true`。
+
+## N3（P2）重定向——已修
+
+`redirect: 'error'`；单测 302 fixture → `PLATFORM_UNAVAILABLE` 不跟随。
+
+## N4（P3）开关名实——已修（文档路径）
+
+`allowInsecureTls` 保留键名（改键属破坏性变更，留 CHANGELOG 时机），config 注释明确「只放行明文 http，不放松 TLS 证书校验（自签证书走 NODE_EXTRA_CA_CERTS）」。
+
+## N5（P3）businessDomain——已修
+
+Schema 加 `.pattern(/^[A-Za-z0-9_-]{1,64}$/)`；读取器侧同样拒绝非法值（单测：含换行的值在 fetcher 之前被拒）。
+
+## N6（P3）refresh 竞态——已修（含一次自找的死锁）
+
+初版在 refresh 内调用 `ensure()`，而 `ensure` 首行等待 `reloading`——**自死锁**（本地测试 297 秒挂起暴露）。修正：拆出不过闸的 `ensureMounted()` 供 refresh 内部重挂使用，`ensure()` 对外保持「refresh 期间等待重挂完成」。这本身就是竞态修复的负例验证。
+
+## N7/N8 workflow 注释与隔离——已修
+
+冒烟注释改为准确表述（守卫**放行**路径每次执行、跳过的是 bootstrap、拒绝路径由专门步骤覆盖）；win32 分支同样用 mktemp 临时 home（经环境继承传入 cmd.exe——首版用 POSIX 前缀语法被 cmd 当命令名，run#11 暴露后已修）。
+
+## R1/R2 常量推导与绿点——已修
+
+新增 "Resolve release constants" 步骤从 `runtime/openbkn-dsh-runtime.manifest.json` 与插件 package.json 推导 `PLUGIN_ARTIFACT`/`BUNDLE_NAME` 写入 GITHUB_ENV（单一真相源）；绿点见下。
+
+## 可选项 6：守卫拒绝路径在线负例——已加
+
+新步骤（win32）：`setup-node@v4 node-version 20` 置于 PATH 首位 → `cmd.exe /c …\bin\dsh.cmd --version` → 断言退出码非 0 且输出含 "requires Node"。**run#12 实测：Node v20.20.2 下 `guard exit=1`，输出 `OpenBKN runtime requires Node ^22.19.0 || >=24.0.0 (current: 20.20.2)`**——round6 缺口第 2 项的拒绝路径就此取得原生 Windows 在线证据。
+
+## 本轮验证（实测）
+
+- 本地：插件 **128/128**（新增 fence 6 + hardening 3 + 旧用例契约对齐）、仓库 49/49、package:check；
+- **run#12 `35495747441`（`e142abd`，即 HEAD）双平台 success**：win 128/128 + 49/49 + 冒烟 `0.1.6-alpha.2`（隔离 home）+ **守卫负例过**；mac 同计数冒烟过；publish 跳过；
+- run#11 失败（cmd 不认 POSIX env 前缀）为 bash 门禁即时暴露的引入点回归，修复后转绿。
+
+## 缺口表更新
+
+第 2 项升级为 **✅ 全闭环**（放行路径 run#10、拒绝路径 run#12 均原生 Windows 在线实证）。其余不变（6 强隔离、7 业务 E2E 需用户在场）。
