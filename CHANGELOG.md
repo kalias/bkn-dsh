@@ -10,7 +10,7 @@ All notable changes to this project are documented here.
 - Dropped the darwin-x64 release target (Intel-mac CI runners proved
   unrecoverable); the matrix now covers darwin-arm64 and win32-x64.
 
-## 0.1.3 (2026-09-18)
+## 0.1.3 (2026-09-06)
 
 - Establish the DSH Cordis bundle structure for authenticated, session-bound OpenBKN business context.
 - Add a controlled platform-level OSDK runner and safe OpenBKN CLI authentication boundary.

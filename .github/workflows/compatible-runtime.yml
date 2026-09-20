@@ -19,10 +19,15 @@ jobs:
           - runner: windows-2022
             platform: win32-x64
     runs-on: ${{ matrix.runner }}
+    env:
+      PLUGIN_ARTIFACT: openbkn-dsh-business-context-0.1.4.tgz
+      BUNDLE_NAME: openbkn-dsh-runtime-0.1.6-alpha.2-openbkn.1
     steps:
       - uses: actions/checkout@v4
       - name: Preserve repository LF patch bytes
+        shell: bash
         run: |
+          set -euo pipefail
           git config --global core.autocrlf false
           git checkout -- .
       - uses: pnpm/action-setup@v4
@@ -39,7 +44,10 @@ jobs:
       - name: Install bkn-dsh dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify compatibility series on a clean pinned tree
+        # bash so a failed verify cannot hide behind a successful revert
+        shell: bash
         run: |
+          set -euo pipefail
           node compat/dsh-0.1.6-alpha.2/apply.mjs --dsh release/deepseek-harness
           node compat/dsh-0.1.6-alpha.2/verify.mjs --dsh release/deepseek-harness
           node compat/dsh-0.1.6-alpha.2/apply.mjs --dsh release/deepseek-harness --revert
@@ -55,23 +63,27 @@ jobs:
           node --test compat/dsh-0.1.6-alpha.2/tests/*.test.mjs tests/*.test.mjs runtime/tests/*.test.mjs
           pnpm run package:check
       - name: Build and pack bkn-dsh
+        # bash so a failed build cannot hide behind a successful pack
+        shell: bash
         run: |
+          set -euo pipefail
           pnpm --filter @openbkn/dsh-business-context build
           pnpm --filter @openbkn/dsh-business-context pack --pack-destination release/plugin
       - name: Prepare DSH-native Web profile
-        run: pnpm runtime:profile -- --runtime release/runtime --plugin release/plugin/openbkn-dsh-business-context-0.1.4.tgz --output release/profile
+        run: pnpm runtime:profile -- --runtime release/runtime --plugin "release/plugin/$PLUGIN_ARTIFACT" --output release/profile
       - name: Package runtime archive
-        run: pnpm runtime:package -- --runtime release/runtime --profile release/profile --plugin release/plugin/openbkn-dsh-business-context-0.1.4.tgz --output release/artifacts --platform ${{ matrix.platform }}
+        run: pnpm runtime:package -- --runtime release/runtime --profile release/profile --plugin "release/plugin/$PLUGIN_ARTIFACT" --output release/artifacts --platform ${{ matrix.platform }}
       - name: Check runtime portability
         run: node scripts/check-runtime-portability.mjs --output release/artifacts --platform ${{ matrix.platform }}
       - name: Smoke-test the assembled runtime entrypoint
         shell: bash
         run: |
           set -euo pipefail
-          bundle="release/artifacts/openbkn-dsh-runtime-0.1.6-alpha.2-openbkn.1-${{ matrix.platform }}"
+          bundle="release/artifacts/$BUNDLE_NAME-${{ matrix.platform }}"
           if [[ "${{ matrix.platform }}" == win32-x64 ]]; then
-            # the .cmd launcher needs cmd.exe; drive the embedded CLI directly
-            version="$(node "$bundle/runtime/node_modules/@deepseek-ai/dsh/lib/bin.js" --version)"
+            # drive the real launcher: --version goes straight to the run label,
+            # and cmd.exe /c is non-interactive, so the guard/bootstrap paths stay unexercised-but-honest
+            version="$(cmd.exe /c "$bundle\\bin\\dsh.cmd" --version | tr -d '\r')"
           else
             version="$(OPENBKN_DSH_HOME="$(mktemp -d)" "$bundle/bin/dsh" --version)"
           fi

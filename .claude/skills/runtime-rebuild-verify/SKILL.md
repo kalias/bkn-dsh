@@ -4,7 +4,7 @@ description: Rebuild the OpenBKN DSH Runtime archive for the local platform from
 disable-model-invocation: true
 ---
 
-Rebuild and verify the Runtime for `$ARGUMENTS` (a platform: `darwin-arm64`, `darwin-x64` or `win32-x64`; default to the current machine's platform). Follow `.github/workflows/compatible-runtime.yml` order; it is the source of truth if this file drifts.
+Rebuild and verify the Runtime for `$ARGUMENTS` (a platform: `darwin-arm64` or `win32-x64` — darwin-x64 was dropped from the release matrix; default to the current machine's platform). Follow `.github/workflows/compatible-runtime.yml` order; it is the source of truth if this file drifts.
 
 ## Preconditions (stop and report if any fails)
 
