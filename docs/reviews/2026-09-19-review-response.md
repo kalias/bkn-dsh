@@ -355,3 +355,63 @@ darwin-x64：按用户决策移出发布矩阵（manifest 不再声明该平台�
   - macos-14：**119/119 + 49/49**（`fail 0`）；
   - 两平台入口冒烟步骤通过（win32 走内嵌 CLI，断言含 `0.1.6-alpha.2`）。
 - 验收判定：round6 缺口表第 1/3/4/5 项以此为准确关闭；第 2 项（`.cmd` 原生交互早退）与第 6 项（强隔离跨机）仍未验证。
+
+---
+
+# 第八轮回应（round8：F1–F7，2026-09-20）
+
+核实结论：**F1/F2/F3/F4/F5/F7 属实全修；F6（CI 绿点在 HEAD-1）由本轮重跑自然解决**。round8 的独立取证（skipped=0 实证缺口 1、win32 归档级核验实证缺口 3）直接采纳并记入下表。
+
+## F1（P0）所有多命令步骤 bash 化——已修 + 负例证明
+
+- 修复：`Preserve LF`、`Verify compatibility series`（apply/verify/revert——verify 失败不再能被成功的 revert 掩盖）、`Build and pack`（build 失败不再打出残缺 tgz）全部加 `shell: bash` + `set -euo pipefail`；连同既有测试与冒烟步骤，**workflow 内 5 个多命令块全部 bash 化**（grep `shell:|run: |` 复核）。
+- 负例证明（本机，交接单要求的验收）：
+  - pwsh 语义复现：`node verify.mjs`(exit 1) 后 `node revert.mjs`(exit 0) → 块退出 0（旧形态会绿）；
+  - bash 语义：同序列 → **exit 1**（失败按位传播）；
+  - build&pack 序列（成功 build + exit 3 的 pack）→ bash 块 **exit 3**（精确传播）。
+
+## F2（P1）win32 冒烟改走真实 `.cmd`——已修，三轮到绿
+
+接受审核纠正：「`.cmd` 需交互」判断不成立，`cmd.exe /c` 非交互且 `--version` 经 `goto run` 直达 CLI、跳过 bootstrap；且**Node 守卫在每次调用时先执行**——比直驱 bin.js 覆盖更多。落地过程中先后修掉两个真实 Windows 坑（均有 run 日志为证）：
+- run#8：pwsh 不展开 `$PLUGIN_ARTIFACT`（PS 变量为空）→ profile 步装了目录而非 tgz——改用 `${{ env.* }}`（shell 无关、装填前展开）；这同时是 F3 参数化的实现方式；
+- run#9：git-bash 的 MSYS 路径转换把 `cmd.exe /c` 的 `/c` 转成盘符路径 → cmd 进交互模式（banner 即证）→ `MSYS_NO_PATHCONV=1`；
+- run#9b：cmd 解析正斜杠路径失败（`'release' is not recognized`）→ 专用反斜杠路径。
+- **run#10 `35489957883`（`1b8d8a3`）**：双平台 success；**win32 冒烟输出 `entrypoint reported: 0.1.6-alpha.2`（经 bin\dsh.cmd）**，mac 同。round6 缺口第 2 项（`.cmd` 原生早退路径中的版本拒绝与 goto run 行为）就此取得在线证据（守卫拒绝 23 的逻辑本身仍由生成脚本测试覆盖）。
+
+## F3 workflow 硬编码——已修
+
+`PLUGIN_ARTIFACT`/`BUNDLE_NAME` 提升为 job 级 env 常量，profile/package/smoke 三处引用之（并以 `${{ env.* }}` 形式，见 F2）；不再在三行命令里重复字面量。
+
+## F4 CHANGELOG 日期——已修
+
+0.1.3 段日期改为 bump 提交所在日 **2026-09-06**（`dbd6410` 等三连提交实证；原 09-18 为臆造，采纳审核）。
+
+## F5 README 平台说明——已修
+
+双语 README 前置条件句补「仅发布 darwin-arm64 与 win32-x64；不提供 Intel Mac（darwin-x64）构建」。
+
+## F6 CI 绿点落在 HEAD-1——由重跑解决
+
+run#10 基线即当前 HEAD（`1b8d8a3`），双平台绿。
+
+## F7 fork feat 分支滞后——已同步
+
+`feat/dsh-0.1.6-alpha.2-compat` 与 main 同步推至 `1b8d8a3`（本轮每次提交均双推）。
+
+## 验收缺口表（round6 第 6 节终态）
+
+| 项 | 状态 | 依据 |
+|---|---|---|
+| 1. Windows 原生 portability/launcher 测试 | ✅ | round8 独立统计 skipped=0（symlink 用例真跑）+ run#6/10 双 49/49 |
+| 2. `.cmd` 原生行为 | ✅（冒烟级） | run#10 win32 经 cmd.exe→dsh.cmd→goto run→CLI 全链；守卫拒绝 23 由生成脚本测试覆盖（原生旧 Node 拒绝场景未在线复现，如实注明） |
+| 3. win32-x64 归档级核验 | ✅ | round8 独立下载 194MB zip：sha256 符合、无符号链接（pnpm cmd-shim 平台语义）、shim 全 `%~dp0` 相对、0 构建路径、注册表式 pin、守卫+两处早退在——升级此前「消费方验证」表述 |
+| 4. Actions 在线 | ✅ | run#1–#10 十次 run 证据链 |
+| 5. 干净 checkout 全链路 | ✅ | 每 run 均干净起步；run#10 含全部门禁步骤 |
+| 6. 强隔离跨机启动 | ❌ | 需独立机器/环境 |
+| 7. 业务 E2E | ❌ | 需用户在场（未变） |
+
+## 本轮验证汇总（实测）
+
+- 本机负例证明 3 组（见 F1）；本地回归 49/49 + 119/119 + package:check（每次推送前）；
+- run#10 双平台 success：win 119/119+49/49+冒烟 `0.1.6-alpha.2`（.cmd 路径）；mac 同计数+冒烟；
+- run#7（profile 失败）/run#8（MSYS）/run#9（正斜杠）三次失败均为修复引入点的真实回归，bash 门禁下即时暴露——门禁有效性本身获得三轮负例级验证。
