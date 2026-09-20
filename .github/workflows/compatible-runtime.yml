@@ -100,8 +100,7 @@ jobs:
             # below); bootstrap is skipped by design for --version.
             # cmd.exe needs backslashes and an unmangled /c switch.
             bundle_cmd="${bundle//\//\\}"
-            home_cmd="${smoke_home//\//\\}"
-            version="$(MSYS_NO_PATHCONV=1 cmd.exe /c "OPENBKN_DSH_HOME=$home_cmd" "$bundle_cmd\\bin\\dsh.cmd" --version | tr -d '\r')"
+            version="$(OPENBKN_DSH_HOME="$smoke_home" MSYS_NO_PATHCONV=1 cmd.exe /c "$bundle_cmd\\bin\\dsh.cmd" --version | tr -d '\r')"
           else
             version="$(OPENBKN_DSH_HOME="$smoke_home" "$bundle/bin/dsh" --version)"
           fi
