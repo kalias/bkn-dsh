@@ -203,8 +203,8 @@ test('mirror matching follows platform identity rules (pure)', () => {
   const root = process.platform === 'win32'
     ? 'C:\\Users\\Builder\\src'
     : '/Users/build-machine/src'
-  // same root, native match
-  assert.equal(mirrorRelativeFor([root], `${root}${sep}pkg${sep}a.js`), join('pkg', 'a.js'))
+  // same root, native match; the pure core speaks normalized separators
+  assert.equal(mirrorRelativeFor([root], `${root}${sep}pkg${sep}a.js`), 'pkg/a.js')
   // a different tree under a same-named prefix never matches
   assert.equal(mirrorRelativeFor([root], `${root}-other${sep}pkg${sep}a.js`), undefined)
   // case-different roots only mirror each other on win32
