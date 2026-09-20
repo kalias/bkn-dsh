@@ -70,16 +70,17 @@ jobs:
           pnpm --filter @openbkn/dsh-business-context build
           pnpm --filter @openbkn/dsh-business-context pack --pack-destination release/plugin
       - name: Prepare DSH-native Web profile
-        run: pnpm runtime:profile -- --runtime release/runtime --plugin "release/plugin/$PLUGIN_ARTIFACT" --output release/profile
+        # ${{ env.* }} expands before the shell runs, so it works under pwsh and bash alike ($VAR would silently empty under pwsh)
+        run: pnpm runtime:profile -- --runtime release/runtime --plugin "release/plugin/${{ env.PLUGIN_ARTIFACT }}" --output release/profile
       - name: Package runtime archive
-        run: pnpm runtime:package -- --runtime release/runtime --profile release/profile --plugin "release/plugin/$PLUGIN_ARTIFACT" --output release/artifacts --platform ${{ matrix.platform }}
+        run: pnpm runtime:package -- --runtime release/runtime --profile release/profile --plugin "release/plugin/${{ env.PLUGIN_ARTIFACT }}" --output release/artifacts --platform ${{ matrix.platform }}
       - name: Check runtime portability
         run: node scripts/check-runtime-portability.mjs --output release/artifacts --platform ${{ matrix.platform }}
       - name: Smoke-test the assembled runtime entrypoint
         shell: bash
         run: |
           set -euo pipefail
-          bundle="release/artifacts/$BUNDLE_NAME-${{ matrix.platform }}"
+          bundle="release/artifacts/${{ env.BUNDLE_NAME }}-${{ matrix.platform }}"
           if [[ "${{ matrix.platform }}" == win32-x64 ]]; then
             # drive the real launcher: --version goes straight to the run label,
             # and cmd.exe /c is non-interactive, so the guard/bootstrap paths stay unexercised-but-honest
