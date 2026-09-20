@@ -310,7 +310,7 @@ fork `kalias/bkn-dsh` main 快进至修复分支 → `gh workflow run compatible
 
 | round6 第 6 节项 | 状态 |
 |---|---|
-| 1. Windows 原生 portability 与 launcher 测试 | ⚠️ run#4 为假绿（2 例失败被掩盖）；以修复后重跑为准（见第七轮回应） |
+| 1. Windows 原生 portability 与 launcher 测试 | ✅（run#6 修复后真绿：49/49 + 119/119，冒烟通过；run#4 曾为假绿已更正） |
 | 2. Windows `.cmd` 早退原生行为 | ⚠️ 部分：`.cmd` 由 CI 生成文本断言覆盖，原生批处理执行仍无（需交互式验证） |
 | 3. win32-x64 实际打包、归档扫描、入口执行 | ✅ 打包+portability 在线通过；入口执行属 artifact 消费方验证 |
 | 4. GitHub Actions 在线 | ✅（4 次 run，证据链完整） |
@@ -347,6 +347,11 @@ darwin-x64：按用户决策移出发布矩阵（manifest 不再声明该平台�
 - `CHANGELOG.md`：0.1.4 段 118→119/113→119 修正；原 `## Unreleased` 四条为 0.1.3 期事项，归位为新 `## 0.1.3 (2026-09-18)` 段；Unreleased 改记当前事项（CI 加固 + darwin-x64 移除）；
 - `docs/evidence/m5-e2e.md` 顶部加「已被后续修改取代」注记（LOCAL-ONLY workaround 已删、401/403 分类已收窄、计数增长），历史正文未改写。
 
-## f. 重跑取证
+## f. 重跑取证（run#5 → run#6）
 
-（本节由重跑后补记——见下。）
+- **run#5 `35486046897`（`4930707`）**：macos-14 ✅；windows 仅剩 1 例失败——**且是本次新加的纯测试自身期望写错**（`mirrorRelativeFor` 契约为规范化正斜杠，测试用了 `join()` 的平台原生分隔符），两例原始 `.bin` 用例已通过（fixture 显式化修复生效）。注意：bash 门禁此时已生效——失败真实冒出并使步骤红，证明 a 项修复起作用。
+- **run#6 `35486499667`（`5b1e792`）**：**completed / success**，两平台 job 全绿、publish 跳过。日志取证计数：
+  - windows-2022：插件组 **119/119**、仓库/compat/runtime 组 **49/49**（`not ok` 0 条）；
+  - macos-14：**119/119 + 49/49**（`fail 0`）；
+  - 两平台入口冒烟步骤通过（win32 走内嵌 CLI，断言含 `0.1.6-alpha.2`）。
+- 验收判定：round6 缺口表第 1/3/4/5 项以此为准确关闭；第 2 项（`.cmd` 原生交互早退）与第 6 项（强隔离跨机）仍未验证。
