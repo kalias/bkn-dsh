@@ -12,6 +12,8 @@ Enterprise decisions need trusted business objects, metrics, rules, relationship
 
 bkn-dsh is an additive DeepSeek Harness plugin that lets authorized users select one OpenBKN business knowledge network for a conversation, analyze within that explicit scope, and inspect available business provenance for each completed answer.
 
+> Version prerequisite: the provenance views require an OpenBKN enterprise license with business-domain authorization (`x-business-domain`). Community-edition users see an upgrade prompt instead of provenance data — the rest of the plugin works on the community edition.
+
 ## Who it serves
 
 - Business users and analysts who need explainable, governed analysis.
@@ -73,3 +75,18 @@ Two artifacts work together on your own DSH source checkout at the exact upstrea
 **The patch is required, not optional**: on an unpatched DSH the plugin installs, loads, and binds knowledge networks, but the session events it persists are rejected on every DSH restart (the upstream event whitelist is a build-time static set). The patch adds the missing write side so sessions reload normally and stay portable after the plugin is uninstalled. It is fail-closed and must not be applied to a desktop bundle or another DSH version; revert it with `apply.mjs --revert` before changing DSH versions. See [the compatibility package](compat/dsh-0.1.6-alpha.2/README.md) and the step-by-step [install guide](docs/guides/install-with-patch.md) (configuration, credentials, uninstall, known caveats).
 
 Known upstream limitation: running DSH directly from source in dev form breaks tool dispatch for any plugin (`Cannot read properties of undefined (reading 'prepare')`); full Q&A requires a packaged form — the recommended Runtime above, or `scripts/build-compatible-runtime.mjs --dsh <clean-checkout> --output <dir>` from this repository.
+
+## Prerequisites and trial path
+
+The plugin needs a reachable OpenBKN platform with at least one knowledge network you can access.
+
+1. **Platform** — run one locally with [bkn-foundry](https://github.com/openbkn-ai/bkn-foundry) (`deploy/dev/mac.sh` on macOS; Docker engine with ≥16 GB memory), or use your organization's deployment.
+2. **Sample data** — import a sample knowledge network from [bkn-samples](https://github.com/openbkn-ai/bkn-samples) (`supply_ontology_hand` is the primary end-to-end dataset).
+3. **Credentials** — `openbkn auth login <platform-url>` once; the plugin reads the token through the CLI handshake only.
+4. **Bind** — open the OpenBKN panel in DSH, pick the network, and start a session in its workspace.
+
+## Upgrade and uninstall
+
+- **Runtime N → N+1**: download the new archive into a fresh directory and start it; the isolated OpenBKN DSH home (`OPENBKN_DSH_HOME`, default under your data directory) carries sessions and settings across runtime versions, so nothing is migrated by hand.
+- **Source-build trees**: before changing the DSH revision, revert the compatibility series (`apply.mjs --revert`), switch, and re-apply the matching series if one exists for the new revision.
+- **Uninstall the plugin**: `dsh plugin --profile <name> remove @openbkn/dsh-business-context`, then remove the leftover `node_modules/@openbkn` inside that profile directory. With the compatibility patch applied, sessions created while the plugin was installed remain readable after uninstall (their plugin events are ignorable); without it, stored sessions that contain plugin events are refused on reload.

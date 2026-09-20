@@ -151,8 +151,8 @@ export class OpenBknUiController {
       await this.port.bindNetwork(sessionId, networkId, signal)
       this.refreshBoundSession?.(sessionId)
       this.close()
-    } catch {
-      this.publish({ ...this.state, phase: 'error', message: 'This network could not be bound to the current conversation. Try again.' })
+    } catch (error: unknown) {
+      this.publish({ ...this.state, phase: 'error', message: bindFailureMessage(error) })
     }
   }
 
@@ -192,4 +192,15 @@ function connectionFailureMessage(error: unknown): string {
     }
   }
   return '无法验证 OpenBKN 连接。请检查 Token 和平台地址后重试。'
+}
+
+/** Build the overlay's bind-failure text; the cause is never swallowed silently. */
+function bindFailureMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null
+    && (error as { code?: unknown }).code === 'openbkn/directory-picker-unavailable') {
+    return '当前连接模式（远程/浏览目录后端）不支持创建新工作区。请先为该知识网络关联一个已存在的本地工作区，或从本地桌面会话操作。'
+  }
+  const detail = error instanceof Error ? error.message.trim() : ''
+  return detail === '' ? 'This network could not be bound to the current conversation. Try again.'
+    : `This network could not be bound to the current conversation: ${detail}`
 }

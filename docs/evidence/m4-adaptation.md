@@ -1,5 +1,7 @@
 # M4：bkn-dsh 适配 DSH 0.1.6-alpha.2 记录
 
+> **注记（2026-09-20）**：本文为当时证据快照。第 5 节「原补丁 3（ignorable session events）已删除」的表述已被后续修改取代——M5 期间 compat 系列**恢复**了该补丁的写入侧（0003，`Session.append` 非界面事件接受 `LogOnlyEventIntent`；读侧原生、写入侧缺失；恢复提交 `00d5942`），2026-09-20 的 G2 实验证实其必要性：缺写入侧时插件事件以 required 持久化，DSH 重启后拒绝重载。历史正文保留下文不作改写。
+
 日期：2026-09-19。
 
 ## 新 compat 系列 `compat/dsh-0.1.6-alpha.2/`

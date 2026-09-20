@@ -59,3 +59,7 @@ node compat/dsh-0.1.6-alpha.2/apply.mjs --dsh /path/to/deepseek-harness --revert
 ```
 
 The command verifies every patch digest, the exact base revision, a clean target, and the full patch series before modifying anything. If a check fails, it makes no change.
+
+## Known upstream limitation (source-dev form)
+
+Running DSH directly from a source tree in dev form (`pnpm dsh web` over tsx) breaks tool dispatch for every plugin in `dsh-v0.1.6-alpha.2` — any tool call fails with `Cannot read properties of undefined (reading 'prepare')` regardless of the agent preset, native tools included. This is upstream behavior, not covered by this patch series, and identical on patched and unpatched trees. Binding, network reads, and session persistence work in source-dev form; full Q&A requires a packaged runtime (see the repository README).

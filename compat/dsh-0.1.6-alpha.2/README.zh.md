@@ -38,3 +38,7 @@ node compat/dsh-0.1.6-alpha.2/apply.mjs --dsh /path/to/deepseek-harness --revert
 ```
 
 命令在修改任何内容前会校验补丁摘要、精确基线提交、干净工作树与完整补丁系列；任一校验失败即不做任何改动（fail-closed）。
+
+## 已知上游限制（源码 dev 形态）
+
+在 `dsh-v0.1.6-alpha.2` 上以源码 dev 形式直接运行 DSH（`pnpm dsh web` 走 tsx）时，任何插件的工具派发都会失败——工具调用一律报 `Cannot read properties of undefined (reading 'prepare')`，与 agent 预设无关，原生工具同样受影响。这是上游行为，不在本补丁系列范围内，打补丁前后表现一致。源码 dev 形式下绑定、网络读取与会话持久化均正常；完整问答需使用打包形态的 Runtime（见仓库 README）。
