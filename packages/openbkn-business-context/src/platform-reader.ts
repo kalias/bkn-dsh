@@ -104,6 +104,9 @@ export class OpenBknPlatformReader {
           'x-business-domain': this.config.businessDomain?.trim() || 'bd_public',
           authorization: `Bearer ${token}`,
         },
+        // Fixed routes: following redirects would silently tolerate endpoint
+        // drift and https→http downgrades for no benefit.
+        redirect: 'error',
         signal: requestSignal,
       })
     } catch (error: unknown) {
@@ -134,14 +137,14 @@ export class OpenBknPlatformReader {
     if (contentLength !== null && Number(contentLength) > MAX_PLATFORM_RESPONSE_BYTES) {
       throw new PlatformReaderError('OUTPUT_OVERFLOW', 'OpenBKN platform response exceeded the safe Host limit.')
     }
+    // Stream with a hard cap: buffering a header-less body first would let an
+    // oversized or hostile response consume Host memory before the check runs.
     let text: string
     try {
-      text = await response.text()
+      text = await readCappedBody(response, MAX_PLATFORM_RESPONSE_BYTES)
     } catch (error: unknown) {
+      if (error instanceof PlatformReaderError) throw error
       throw new PlatformReaderError('PLATFORM_UNAVAILABLE', 'OpenBKN platform data is temporarily unavailable.', { cause: error })
-    }
-    if (new TextEncoder().encode(text).byteLength > MAX_PLATFORM_RESPONSE_BYTES) {
-      throw new PlatformReaderError('OUTPUT_OVERFLOW', 'OpenBKN platform response exceeded the safe Host limit.')
     }
     let value: unknown
     try { value = JSON.parse(text) } catch (error: unknown) {
@@ -203,21 +206,60 @@ function projectBusinessGraph(value: JsonValue): JsonValue {
   })
 }
 
+/** Hosts for which plaintext http is tolerated regardless of the insecure switch. */
+export function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+}
+
+/**
+ * Scheme fence shared by every outbound OpenBKN path so the Bearer token can
+ * never be configured onto a plaintext or unexpected endpoint: https is
+ * required outside loopback unless plaintext was explicitly allowed.
+ */
+export function assertHttpsEndpoint(url: URL, allowPlaintext: boolean): void {
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && (isLoopbackHost(url.hostname) || allowPlaintext))) {
+    throw new PlatformReaderError('PLATFORM_MISMATCH', 'OpenBKN platform URL must use HTTPS outside loopback.')
+  }
+}
+
 function fixedUrl(baseUrl: string, path: string, allowInsecureTls: boolean): URL {
   let url: URL
   try { url = new URL(path, `${normalizeBaseUrl(baseUrl)}/`) } catch {
     throw new PlatformReaderError('PLATFORM_MISMATCH', 'OpenBKN platform URL is not configured.')
   }
-  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && (loopback || allowInsecureTls))) {
-    throw new PlatformReaderError('PLATFORM_MISMATCH', 'OpenBKN platform URL must use HTTPS outside loopback.')
-  }
+  assertHttpsEndpoint(url, allowInsecureTls)
   return url
 }
 
 function normalizeBaseUrl(value: string): string { return value.trim().replace(/\/+$/, '') }
 function record(value: unknown): Record<string, unknown> | undefined { return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined }
 function safeParse(text: string): unknown { try { return JSON.parse(text) } catch { return undefined } }
+
+/** Read a response body as text, aborting the stream once the byte cap is exceeded. */
+async function readCappedBody(response: Response, capBytes: number): Promise<string> {
+  if (response.body === null) return response.text()
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let received = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done === true) break
+    if (value === undefined) continue
+    received += value.byteLength
+    if (received > capBytes) {
+      await reader.cancel().catch(() => undefined)
+      throw new PlatformReaderError('OUTPUT_OVERFLOW', 'OpenBKN platform response exceeded the safe Host limit.')
+    }
+    chunks.push(value)
+  }
+  const merged = new Uint8Array(received)
+  let offset = 0
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(merged)
+}
 function array(value: unknown): readonly unknown[] { return Array.isArray(value) ? value : [] }
 function string(value: unknown): string | undefined { return typeof value === 'string' && value.trim() ? value.trim().slice(0, 512) : undefined }
 function number(value: unknown): number | undefined { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined }

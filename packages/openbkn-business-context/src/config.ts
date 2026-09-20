@@ -18,7 +18,12 @@ export interface Config {
   maxGraphNodes: number
   /** Maximum business-context graph edge count rendered for one turn. */
   maxGraphEdges: number
-  /** Explicit opt-in only; disabled by default for local production use. */
+  /**
+   * Explicit opt-in only; disabled by default for local production use.
+   * Allows plaintext http to non-loopback hosts — it does NOT relax TLS
+   * certificate validation (self-signed certs are handled by the Node trust
+   * store, e.g. NODE_EXTRA_CA_CERTS, not by this switch).
+   */
   allowInsecureTls: boolean
 }
 
@@ -26,7 +31,7 @@ export interface Config {
 export const Config: Schema<Config> = Schema.object({
   baseUrl: Schema.string().required(),
   mcpUrl: Schema.string(),
-  businessDomain: Schema.string(),
+  businessDomain: Schema.string().pattern(/^[A-Za-z0-9_-]{1,64}$/),
   cliPath: Schema.string().default('openbkn'),
   requestTimeoutMs: Schema.natural().min(1).default(30_000),
   maxResultBytes: Schema.natural().min(1).default(1_000_000),

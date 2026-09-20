@@ -9,10 +9,10 @@ test('derives the standard Context Loader endpoint from the configured OpenBKN p
   )
 })
 
-test('honours an explicitly configured Context Loader endpoint', () => {
+test('honours an explicitly configured Context Loader endpoint on the same origin', () => {
   assert.equal(
-    resolveMcpUrl({ baseUrl: 'https://platform.example', mcpUrl: 'https://mcp.example/context/' }),
-    'https://mcp.example/context/',
+    resolveMcpUrl({ baseUrl: 'https://platform.example', mcpUrl: 'https://platform.example/context/' }),
+    'https://platform.example/context/',
   )
 })
 
