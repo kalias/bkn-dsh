@@ -5,7 +5,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, sym
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 
-import { assertPortableBundle, dereferenceSymlinks, prefixForms, scrubAbsolutePaths, stripInstallMetadata } from '../runtime/bundle-portability.mjs'
+import { assertPortableBundle, dereferenceSymlinks, mirrorRelativeFor, prefixForms, scrubAbsolutePaths, stripInstallMetadata } from '../runtime/bundle-portability.mjs'
 
 function fresh(name) {
   const root = join(tmpdir(), `openbkn-portability-${name}-${process.pid}`)
@@ -142,10 +142,15 @@ test('a mirrored .bin entry keeps resolving modules relative to its real file', 
   // like real .bin entries that require('../package.json').
   writeFileSync(join(source, 'semver', 'bin', 'semver.js'), 'const p = require("../package.json")\nconsole.log(p.name)\n')
   mkdirSync(join(source, 'node_modules', '.bin'), { recursive: true })
-  symlinkSync(join(source, 'semver', 'bin', 'semver.js'), join(source, 'node_modules', '.bin', 'semver'))
 
+  // Node's cpSync rewrites/materializes absolute symlinks differently per
+  // platform (macOS rebases to absolute source paths, Windows rewrites them
+  // in place), so the bundle shape is constructed explicitly: a plain copied
+  // tree plus the production link form the sweep must handle — an absolute
+  // symlink into the source tree.
   const root = fresh('binmirror')
   cpSync(source, root, { recursive: true })
+  symlinkSync(join(source, 'semver', 'bin', 'semver.js'), join(root, 'node_modules', '.bin', 'semver'))
 
   const replaced = dereferenceSymlinks(root, [source])
   const link = join(root, 'node_modules', '.bin', 'semver')
@@ -171,11 +176,11 @@ test('maps links through a bundle subdirectory prefix (runtime shape)', { skip: 
   mkdirSync(join(source, 'node_modules', 'semver', 'bin'))
   writeFileSync(join(source, 'node_modules', 'semver', 'bin', 'semver.js'), 'const p = require("../package.json")\nconsole.log(p.name)\n')
   mkdirSync(join(source, 'node_modules', '.bin'))
-  // cpSync rewrites relative links to absolute source paths; emulate that
-  symlinkSync(join(source, 'node_modules', 'semver', 'bin', 'semver.js'), join(source, 'node_modules', '.bin', 'semver'))
 
+  // same as above: construct the production link shape explicitly
   const root = fresh('prefix-root')
   cpSync(source, join(root, 'runtime'), { recursive: true })
+  symlinkSync(join(source, 'node_modules', 'semver', 'bin', 'semver.js'), join(root, 'runtime', 'node_modules', '.bin', 'semver'))
 
   const replaced = dereferenceSymlinks(root, [{ source, into: 'runtime' }])
   const link = join(root, 'runtime', 'node_modules', '.bin', 'semver')
@@ -192,6 +197,23 @@ test('maps links through a bundle subdirectory prefix (runtime shape)', { skip: 
 
   rmSync(source, { recursive: true, force: true })
   rmSync(root, { recursive: true, force: true })
+})
+
+test('mirror matching follows platform identity rules (pure)', () => {
+  const root = process.platform === 'win32'
+    ? 'C:\\Users\\Builder\\src'
+    : '/Users/build-machine/src'
+  // same root, native match
+  assert.equal(mirrorRelativeFor([root], `${root}${sep}pkg${sep}a.js`), join('pkg', 'a.js'))
+  // a different tree under a same-named prefix never matches
+  assert.equal(mirrorRelativeFor([root], `${root}-other${sep}pkg${sep}a.js`), undefined)
+  // case-different roots only mirror each other on win32
+  const upper = root.toUpperCase()
+  const caseVariantTarget = `${root}${sep}pkg${sep}a.js`
+  assert.equal(
+    mirrorRelativeFor([upper], caseVariantTarget) !== undefined,
+    process.platform === 'win32',
+  )
 })
 
 test('in-bundle directory links pass scanning without EISDIR and keep their contents scanned', { skip: !canCreateSymlinks() && 'platform refuses symlink creation' }, () => {

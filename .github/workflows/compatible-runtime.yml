@@ -46,7 +46,11 @@ jobs:
       - name: Build compatible DSH runtime
         run: pnpm runtime:build -- --dsh release/deepseek-harness --output release/runtime
       - name: Test plugin and compatibility tooling
+        # bash so every command's failure fails the step; pwsh would exit on
+        # the LAST native command's code and swallow a mid-block failure
+        shell: bash
         run: |
+          set -euo pipefail
           pnpm --filter @openbkn/dsh-business-context test
           node --test compat/dsh-0.1.6-alpha.2/tests/*.test.mjs tests/*.test.mjs runtime/tests/*.test.mjs
           pnpm run package:check
@@ -60,6 +64,19 @@ jobs:
         run: pnpm runtime:package -- --runtime release/runtime --profile release/profile --plugin release/plugin/openbkn-dsh-business-context-0.1.4.tgz --output release/artifacts --platform ${{ matrix.platform }}
       - name: Check runtime portability
         run: node scripts/check-runtime-portability.mjs --output release/artifacts --platform ${{ matrix.platform }}
+      - name: Smoke-test the assembled runtime entrypoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="release/artifacts/openbkn-dsh-runtime-0.1.6-alpha.2-openbkn.1-${{ matrix.platform }}"
+          if [[ "${{ matrix.platform }}" == win32-x64 ]]; then
+            # the .cmd launcher needs cmd.exe; drive the embedded CLI directly
+            version="$(node "$bundle/runtime/node_modules/@deepseek-ai/dsh/lib/bin.js" --version)"
+          else
+            version="$(OPENBKN_DSH_HOME="$(mktemp -d)" "$bundle/bin/dsh" --version)"
+          fi
+          echo "entrypoint reported: $version"
+          grep -q "0.1.6-alpha.2" <<< "$version"
       - uses: actions/upload-artifact@v4
         with:
           name: openbkn-dsh-runtime-${{ matrix.platform }}

@@ -297,7 +297,7 @@ fork `kalias/bkn-dsh` main 快进至修复分支 → `gh workflow run compatible
 - **run#2 `35453238573`**：windows 仅剩 `spawnSync pnpm.cmd EINVAL`（Node 2024 安全变更：.cmd 需 shell）与 `.bin` 两例；诊断信息（replaced dump）确认形态。
 - **run#3 `35453829775`**：windows-2022 ✅、macos-14 ✅；macos-13（darwin-x64）持续排队无法获得 runner。
 - **决策**：用户决定从发布矩阵移除 darwin-x64（Intel mac runner 队列不可靠）；矩阵/manifest/校验器/usage 同步收敛为 darwin-arm64 + win32-x64。
-- **run#4 `35457559502`（`4860bb9`）**：**completed / success**——两平台全绿。
+- **run#4 `35457559502`（`4860bb9`）**：job 级 completed/success——**但 Windows 为假绿（2026-09-20 复核取证更正）**：`node --test` 组实为 48 例 46 过 2 失败（tests/bundle-portability 两例 `.bin` 镜像用例期望 relative-link 实得 copy），失败被同块后续命令 `package:check` 的退出码覆盖（pwsh 以最后原生命令退出）。macOS 为真实 119/119 + 48/48。修复见第七轮回应。
 
 ## run#4 证据（gh api 实测）
 
@@ -310,7 +310,7 @@ fork `kalias/bkn-dsh` main 快进至修复分支 → `gh workflow run compatible
 
 | round6 第 6 节项 | 状态 |
 |---|---|
-| 1. Windows 原生 portability 与 launcher 测试 | ✅（run#4 windows job 全步骤含 portability 检查；测试中 symlink 用例真实执行非 skip） |
+| 1. Windows 原生 portability 与 launcher 测试 | ⚠️ run#4 为假绿（2 例失败被掩盖）；以修复后重跑为准（见第七轮回应） |
 | 2. Windows `.cmd` 早退原生行为 | ⚠️ 部分：`.cmd` 由 CI 生成文本断言覆盖，原生批处理执行仍无（需交互式验证） |
 | 3. win32-x64 实际打包、归档扫描、入口执行 | ✅ 打包+portability 在线通过；入口执行属 artifact 消费方验证 |
 | 4. GitHub Actions 在线 | ✅（4 次 run，证据链完整） |
@@ -319,3 +319,34 @@ fork `kalias/bkn-dsh` main 快进至修复分支 → `gh workflow run compatible
 | 7. 业务 E2E | 本轮 CI 未涉及（此前 3082 已验） |
 
 darwin-x64：按用户决策移出发布矩阵（manifest 不再声明该平台产物）。
+
+---
+
+# 第七轮回应（CI 假绿修复，2026-09-20；交接单 docs/reviews/2026-09-20-round7-followup-ci-false-green-handoff.md）
+
+## a. 门禁修复（exit-code 吞没）
+
+`compatible-runtime.yml` 测试步骤加 `shell: bash` + `set -euo pipefail`——任何一条命令失败即步骤失败，pwsh「以最后原生命令退出」的语义不再适用。
+
+## b. 入口冒烟（round7 P2-1）
+
+新增 "Smoke-test the assembled runtime entrypoint" 步骤（bash）：darwin-arm64 走 `bin/dsh --version`（隔离 OPENBKN_DSH_HOME），win32 直接驱动内嵌 CLI `node …/dsh/lib/bin.js --version`（`.cmd` 需 cmd.exe 交互，属 P3 清单），断言输出含 `0.1.6-alpha.2`。
+
+## c. 两例 Windows 失败（真因）+ 规范化单测
+
+**取证**：run#4 日志中 realpaths dump 的 `target` 恰为链接自身路径——这是 sweep 已将其替换为普通文件后的**事后快照**；真正差异在于 **Windows 的 `cpSync` 对树内绝对符号链接的改写语义与 macOS 不同**（fixture 曾以注释「cpSync rewrites relative links to absolute」描述 macOS 行为并隐式依赖之）。
+
+**修复（按真实契约，未弱化断言）**：两个 fixture 改为显式构造生产形态——先拷贝纯文件树，再在 bundle 内显式创建指向源树的**绝对符号链接**（这正是 sweep 的契约输入：源树绝对链接 → 包内相对链接）；不再依赖 cpSync 的平台相关链接改写。断言不变（`relative-link` + 实际执行）。
+
+**规范化单测（round7 要求）**：抽取纯函数 `mirrorRelativeFor(sourceRoots, target)`（win32 大小写/分隔符不敏感、其余平台精确比较），新增纯单测覆盖：同根匹配、同名前缀的兄弟树不匹配、**大小写不同的根仅在 win32 互相镜像**（POSIX 上断言不匹配）。本地实测：posix 三断言全部符合预期。
+
+## d/e. 文档
+
+- CI 验收记录（`6e3ac65`）已按事实更正：Windows 行改为「假绿，2 例失败被掩盖」，验收表第 1 项改为「以修复后重跑为准」；
+- `compat/dsh-0.1.6-alpha.2/README.md:52` 的 `0.1.3.tgz` → `0.1.4.tgz`（`compat/dsh-0.1.2-rc.1/` 下的 README 属该历史系列、当时版本确为 0.1.3，未改动——与 round7 grep 命中的差异即在此）；
+- `CHANGELOG.md`：0.1.4 段 118→119/113→119 修正；原 `## Unreleased` 四条为 0.1.3 期事项，归位为新 `## 0.1.3 (2026-09-18)` 段；Unreleased 改记当前事项（CI 加固 + darwin-x64 移除）；
+- `docs/evidence/m5-e2e.md` 顶部加「已被后续修改取代」注记（LOCAL-ONLY workaround 已删、401/403 分类已收窄、计数增长），历史正文未改写。
+
+## f. 重跑取证
+
+（本节由重跑后补记——见下。）

@@ -90,15 +90,30 @@ const normalizedKey = value => (process.platform === 'win32'
   ? value.replaceAll('\\', '/').toLowerCase()
   : value)
 
-function mirrorsTarget(mappings, root, target) {
-  const canonicalRoot = realpathSync(resolve(root))
+/**
+ * Pure core of mirror-root matching: returns the path of `target` relative to
+ * the first mapping root whose normalized key contains it, or undefined.
+ * Windows path identity is case-insensitive with mixed separators tolerated;
+ * every other platform compares exactly, so two roots differing only by case
+ * never mirror each other there.
+ */
+export function mirrorRelativeFor(sourceRoots, target) {
   const targetKey = normalizedKey(target)
-  for (const { source, into } of mappings) {
+  for (const source of sourceRoots) {
     const sourceKey = normalizedKey(source)
     if (targetKey === sourceKey || !targetKey.startsWith(`${sourceKey}/`)) continue
     const rel = targetKey.slice(sourceKey.length + 1)
     if (rel.length === 0) continue
-    return join(canonicalRoot, into, rel)
+    return rel
+  }
+  return undefined
+}
+
+function mirrorsTarget(mappings, root, target) {
+  const canonicalRoot = realpathSync(resolve(root))
+  for (const { source, into } of mappings) {
+    const rel = mirrorRelativeFor([source], target)
+    if (rel !== undefined) return join(canonicalRoot, into, rel)
   }
   return undefined
 }

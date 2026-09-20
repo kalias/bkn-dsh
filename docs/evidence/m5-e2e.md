@@ -1,5 +1,10 @@
 # M5：端到端问答验证记录
 
+> **注记（2026-09-20）**：本文为当时证据快照，部分内容已被后续修改取代——
+> ① `runtime/prepare-compatible-runtime.mjs` 的 LOCAL-ONLY workaround 已随 BLOCKER-3 修复删除（osx-sign 处理折叠进补丁 0003，恢复 frozen 安装）；
+> ② 「401/403 + permission_denied → LICENSE_REQUIRED」已按复审收窄：401 一律认证错误，403 仅在 `licensed === false` 时提示企业版；
+> ③ 测试计数自 117 起随各轮新增用例增长（当前 119）。历史正文保留下文不作改写。
+
 日期：2026-09-19。环境：打包版 OpenBKN Runtime（`openbkn-dsh-runtime-0.1.6-alpha.2-openbkn.1-darwin-arm64`，bin/dsh web，端口 3082）+ supply_ontology_hand 样例 + DeepSeek 平台模型（deepseek_flash，用户提供的 API Key 经 DSH 环境变量注入，未落任何文件）。
 
 ## 运行形态

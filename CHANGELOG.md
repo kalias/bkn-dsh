@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Windows and CI hardening from the online acceptance runs: bash test gates,
+  an assembled-runtime entrypoint smoke test, win32 pnpm spawning, and
+  case/separator-normalized mirror-root matching with pure matching tests.
+- Dropped the darwin-x64 release target (Intel-mac CI runners proved
+  unrecoverable); the matrix now covers darwin-arm64 and win32-x64.
+
+## 0.1.3 (2026-09-18)
+
 - Establish the DSH Cordis bundle structure for authenticated, session-bound OpenBKN business context.
 - Add a controlled platform-level OSDK runner and safe OpenBKN CLI authentication boundary.
 - Add additive native DSH UI contributions for network selection, bound context, prompt suggestions, safe tool summaries, and per-turn provenance.
@@ -20,4 +28,4 @@ Target DSH: `dsh-v0.1.6-alpha.2` (`ddefc45fbc7f8e46dd73185e68295696d1297887`).
 - Make the runtime bundle portable: symlinked closure entries are replaced with real copies, build-machine paths are scrubbed from text payloads, the seeded profile keeps a registry-style pin instead of a build-time `file:` path, and `scripts/check-runtime-portability.mjs` fails the release when any of these regress. The launcher now also refuses Node builds older than the supported range.
 - Unify toolchain contracts: CI uses pnpm 11.7.0 (the DSH-pinned version) with a frozen lockfile, and Node requirements read `^22.19.0 || >=24.0.0` everywhere (READMEs, runtime manifest, plugin engines, launcher guard).
 - Sync the compatible-runtime workflow and runtime manifests to the new DSH tag, plugin artifact `openbkn-dsh-business-context-0.1.4.tgz`, and bundle version `0.1.6-alpha.2-openbkn.1`, and add pre-package gates (compatibility round-trip, plugin tests, compatibility/runtime unit tests, package check, portability scan).
-- Verified on a clean `dsh-v0.1.6-alpha.2` worktree: apply/verify revert round-trip with a frozen pnpm 11.7 install, full DSH build, plugin tests 118/118, native plugin install, isolated-directory runtime boot, and web-profile E2E with enterprise provenance reads.
+- Verified on a clean `dsh-v0.1.6-alpha.2` worktree: apply/verify revert round-trip with a frozen pnpm 11.7 install, full DSH build, plugin tests 119/119, native plugin install, isolated-directory runtime boot, and web-profile E2E with enterprise provenance reads.
