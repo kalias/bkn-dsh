@@ -1,5 +1,8 @@
 packages:
   - packages/*
 
+allowBuilds:
+  esbuild: true
+
 overrides:
-  '@deepseek-ai/dsh-typert-generator': link:../../../../../DSH/deepseek-harness/packages/typert/generator
+  '@deepseek-ai/dsh-typert-generator': link:../deepseek-harness/packages/typert/generator

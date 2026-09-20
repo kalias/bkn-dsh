@@ -220,7 +220,16 @@ function createNetworkSessionOpener(ctx: Context, port: OpenBknUiPort) {
     let workspace: WorkspaceView
     if (network.workspacePath === undefined) {
       if (mode !== 'create-workspace') throw new Error('This OpenBKN business knowledge network has no associated local workspace.')
-      const path = await uiWorkspace.pickDirectory()
+      let path: string | null
+      try {
+        path = await uiWorkspace.pickDirectory()
+      } catch (error: unknown) {
+        // The browse directory backend (remote/SSH sessions) serves no native
+        // chooser; surface that exact cause instead of a generic bind failure.
+        const failure = new Error('directory picker unavailable in this connection mode', { cause: error })
+        ;(failure as Error & { code?: string }).code = 'openbkn/directory-picker-unavailable'
+        throw failure
+      }
       if (path === null) throw new Error('Workspace selection was cancelled.')
       workspace = await workspaces.create({ path })
       await port.bindNetworkWorkspace(network.id, workspace.path)
@@ -231,7 +240,7 @@ function createNetworkSessionOpener(ctx: Context, port: OpenBknUiPort) {
 
     const sessionId = mode === 'continue' ? latestWorkspaceSession(workspace, sessions) ?? await sessions.create({ workspaceId: workspace.workspaceId })
       : await sessions.create({ workspaceId: workspace.workspaceId })
-    sessions.open(sessionId)
+    uiWorkspace.openSession(sessionId)
     return sessionId
   }
 }

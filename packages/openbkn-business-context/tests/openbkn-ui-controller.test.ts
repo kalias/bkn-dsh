@@ -185,3 +185,42 @@ test('refreshes native additive session contributions after binding a new sessio
 
   assert.deepEqual(refreshed, ['session-1'])
 })
+
+test('surfaces the targeted message when the directory picker backend cannot serve this connection mode', async () => {
+  const controller = new OpenBknUiController({
+    status: async () => authenticated,
+    configureToken: async () => [],
+    listNetworks: async () => [{ id: 'kn-supply', displayName: 'Supply risk' }],
+    bindNetworkWorkspace: async () => { throw new Error('must not bind') },
+    bindNetwork: async () => { throw new Error('must not bind') },
+  }, async () => {
+    const failure = new Error('directory picker unavailable in this connection mode')
+    ;(failure as Error & { code?: string }).code = 'openbkn/directory-picker-unavailable'
+    throw failure
+  })
+
+  controller.open()
+  await controller.refresh()
+  await controller.openNetwork('kn-supply', 'create-workspace')
+
+  assert.equal(controller.snapshot().phase, 'error')
+  assert.match(controller.snapshot().message ?? '', /当前连接模式/)
+  assert.match(controller.snapshot().message ?? '', /关联一个已存在的本地工作区/)
+})
+
+test('includes the underlying cause in the generic bind-failure message', async () => {
+  const controller = new OpenBknUiController({
+    status: async () => authenticated,
+    configureToken: async () => [],
+    listNetworks: async () => [{ id: 'kn-supply', displayName: 'Supply risk' }],
+    bindNetworkWorkspace: async () => { throw new Error('must not bind') },
+    bindNetwork: async () => { throw new Error('bind rejected by host') },
+  }, async () => 'session-1')
+
+  controller.open()
+  await controller.refresh()
+  await controller.openNetwork('kn-supply', 'new')
+
+  assert.equal(controller.snapshot().phase, 'error')
+  assert.match(controller.snapshot().message ?? '', /bind rejected by host/)
+})

@@ -3,6 +3,7 @@ import type { BusinessNetworkBinding } from './session-binding.js'
 
 export type PlatformReaderErrorCode =
   | 'AUTHENTICATION_REQUIRED'
+  | 'LICENSE_REQUIRED'
   | 'PLATFORM_MISMATCH'
   | 'PLATFORM_UNAVAILABLE'
   | 'REQUEST_ABORTED'
@@ -23,6 +24,8 @@ export interface PlatformReaderConfig {
   /** Maximum projected payload sent from Host to the DSH browser. */
   readonly maxResultBytes: number
   readonly allowInsecureTls: boolean
+  /** Business domain header sent on platform requests; defaults to the platform default `bd_public`. */
+  readonly businessDomain?: string
   readonly resolveToken?: () => Promise<string | undefined>
 }
 
@@ -54,17 +57,25 @@ export class OpenBknPlatformReader {
   }
 
   async getInteractionOperations(interactionId: string, signal: AbortSignal, _cwd?: string): Promise<JsonValue> {
-    const value = await this.get(`/api/agent-observability/v1/interactions/${encodeURIComponent(interactionId)}/operations`, signal)
+    const value = await this.get(`/api/agent-observability/v1/interactions/${encodeURIComponent(interactionId)}/operations`, signal, { licenseGated: true })
     return this.admit(projectOperations(value))
   }
 
   async getInteractionBusinessGraph(interactionId: string, signal: AbortSignal, _cwd?: string): Promise<JsonValue> {
-    const value = await this.get(`/api/agent-observability/v1/interactions/${encodeURIComponent(interactionId)}/business-graph`, signal)
+    const value = await this.get(`/api/agent-observability/v1/interactions/${encodeURIComponent(interactionId)}/business-graph`, signal, { licenseGated: true })
     return this.admit(projectBusinessGraph(value))
   }
 
-  private async get(path: string, signal: AbortSignal): Promise<JsonValue> {
-    return await this.request(path, { method: 'GET' }, signal)
+  /** Resolve the deployment's license edition so license-gated failures can explain themselves. */
+  async getLicenseEdition(signal: AbortSignal): Promise<{ edition?: string; licensed?: boolean } | undefined> {
+    const value = await this.get('/api/safe/v1/capabilities', signal)
+    const source = record(value)
+    const edition = string(source?.edition)
+    return { ...(edition === undefined ? {} : { edition }), ...(typeof source?.licensed === 'boolean' ? { licensed: source.licensed } : {}) }
+  }
+
+  private async get(path: string, signal: AbortSignal, options?: { readonly licenseGated?: boolean }): Promise<JsonValue> {
+    return await this.request(path, { method: 'GET' }, signal, options)
   }
 
   private async post(path: string, body: Record<string, unknown>, signal: AbortSignal): Promise<JsonValue> {
@@ -75,7 +86,7 @@ export class OpenBknPlatformReader {
     }, signal)
   }
 
-  private async request(path: string, init: RequestInit, signal: AbortSignal): Promise<JsonValue> {
+  private async request(path: string, init: RequestInit, signal: AbortSignal, options?: { readonly licenseGated?: boolean }): Promise<JsonValue> {
     if (signal.aborted) throw new PlatformReaderError('REQUEST_ABORTED', 'OpenBKN context request was cancelled.')
     const url = fixedUrl(this.config.baseUrl, path, this.config.allowInsecureTls)
     const token = await this.config.resolveToken?.()
@@ -88,14 +99,37 @@ export class OpenBknPlatformReader {
     try {
       response = await this.fetcher(url, {
         ...init,
-        headers: { ...init.headers, authorization: `Bearer ${token}` },
+        headers: {
+          ...init.headers,
+          'x-business-domain': this.config.businessDomain?.trim() || 'bd_public',
+          authorization: `Bearer ${token}`,
+        },
+        // Fixed routes: following redirects would silently tolerate endpoint
+        // drift and https→http downgrades for no benefit.
+        redirect: 'error',
         signal: requestSignal,
       })
     } catch (error: unknown) {
       if (signal.aborted) throw new PlatformReaderError('REQUEST_ABORTED', 'OpenBKN context request was cancelled.', { cause: error })
       throw new PlatformReaderError('PLATFORM_UNAVAILABLE', 'OpenBKN platform data is temporarily unavailable.', { cause: error })
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
+      // 401 is a caller-identity problem (expired or rejected token class);
+      // the deployment-license gate answers 403 below.
+      throw new PlatformReaderError('AUTHENTICATION_REQUIRED', 'OpenBKN authentication is required.')
+    }
+    if (response.status === 403) {
+      // Only the observability lifecycle routes answer the deployment
+      // license/domain gate with permission_denied; elsewhere that code means
+      // a caller-authorization problem. The body is a small JSON error
+      // envelope, so a bounded read is safe.
+      if (options?.licenseGated === true) {
+        const body = await response.text().catch(() => '')
+        const failure = body.length <= 4096 ? record(safeParse(body))?.error : undefined
+        if (string(record(failure)?.code) === 'permission_denied') {
+          throw new PlatformReaderError('LICENSE_REQUIRED', 'The requested OpenBKN capability requires an enterprise license for this business domain.')
+        }
+      }
       throw new PlatformReaderError('AUTHENTICATION_REQUIRED', 'OpenBKN authentication is required.')
     }
     if (!response.ok) throw new PlatformReaderError('PLATFORM_UNAVAILABLE', 'OpenBKN platform data is temporarily unavailable.')
@@ -103,14 +137,14 @@ export class OpenBknPlatformReader {
     if (contentLength !== null && Number(contentLength) > MAX_PLATFORM_RESPONSE_BYTES) {
       throw new PlatformReaderError('OUTPUT_OVERFLOW', 'OpenBKN platform response exceeded the safe Host limit.')
     }
+    // Stream with a hard cap: buffering a header-less body first would let an
+    // oversized or hostile response consume Host memory before the check runs.
     let text: string
     try {
-      text = await response.text()
+      text = await readCappedBody(response, MAX_PLATFORM_RESPONSE_BYTES)
     } catch (error: unknown) {
+      if (error instanceof PlatformReaderError) throw error
       throw new PlatformReaderError('PLATFORM_UNAVAILABLE', 'OpenBKN platform data is temporarily unavailable.', { cause: error })
-    }
-    if (new TextEncoder().encode(text).byteLength > MAX_PLATFORM_RESPONSE_BYTES) {
-      throw new PlatformReaderError('OUTPUT_OVERFLOW', 'OpenBKN platform response exceeded the safe Host limit.')
     }
     let value: unknown
     try { value = JSON.parse(text) } catch (error: unknown) {
@@ -172,20 +206,60 @@ function projectBusinessGraph(value: JsonValue): JsonValue {
   })
 }
 
+/** Hosts for which plaintext http is tolerated regardless of the insecure switch. */
+export function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+}
+
+/**
+ * Scheme fence shared by every outbound OpenBKN path so the Bearer token can
+ * never be configured onto a plaintext or unexpected endpoint: https is
+ * required outside loopback unless plaintext was explicitly allowed.
+ */
+export function assertHttpsEndpoint(url: URL, allowPlaintext: boolean): void {
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && (isLoopbackHost(url.hostname) || allowPlaintext))) {
+    throw new PlatformReaderError('PLATFORM_MISMATCH', 'OpenBKN platform URL must use HTTPS outside loopback.')
+  }
+}
+
 function fixedUrl(baseUrl: string, path: string, allowInsecureTls: boolean): URL {
   let url: URL
   try { url = new URL(path, `${normalizeBaseUrl(baseUrl)}/`) } catch {
     throw new PlatformReaderError('PLATFORM_MISMATCH', 'OpenBKN platform URL is not configured.')
   }
-  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]'
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && (loopback || allowInsecureTls))) {
-    throw new PlatformReaderError('PLATFORM_MISMATCH', 'OpenBKN platform URL must use HTTPS outside loopback.')
-  }
+  assertHttpsEndpoint(url, allowInsecureTls)
   return url
 }
 
 function normalizeBaseUrl(value: string): string { return value.trim().replace(/\/+$/, '') }
 function record(value: unknown): Record<string, unknown> | undefined { return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined }
+function safeParse(text: string): unknown { try { return JSON.parse(text) } catch { return undefined } }
+
+/** Read a response body as text, aborting the stream once the byte cap is exceeded. */
+async function readCappedBody(response: Response, capBytes: number): Promise<string> {
+  if (response.body === null) return response.text()
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let received = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done === true) break
+    if (value === undefined) continue
+    received += value.byteLength
+    if (received > capBytes) {
+      await reader.cancel().catch(() => undefined)
+      throw new PlatformReaderError('OUTPUT_OVERFLOW', 'OpenBKN platform response exceeded the safe Host limit.')
+    }
+    chunks.push(value)
+  }
+  const merged = new Uint8Array(received)
+  let offset = 0
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(merged)
+}
 function array(value: unknown): readonly unknown[] { return Array.isArray(value) ? value : [] }
 function string(value: unknown): string | undefined { return typeof value === 'string' && value.trim() ? value.trim().slice(0, 512) : undefined }
 function number(value: unknown): number | undefined { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined }

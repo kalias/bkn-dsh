@@ -35,8 +35,14 @@ export type BoundNetworkBadgeState =
 export class BoundNetworkController {
   private state: BoundNetworkBadgeState = { kind: 'idle' }
   private readonly listeners = new Set<() => void>()
+  private retries = 0
 
-  constructor(private readonly read: () => Promise<BusinessNetworkBinding | undefined>) {}
+  constructor(
+    private readonly read: () => Promise<BusinessNetworkBinding | undefined>,
+    /** Retry delay for "agent not live yet" reads; injectable for deterministic tests. */
+    private readonly retryDelayMs: number = 2_000,
+    private readonly maxRetries: number = 5,
+  ) {}
 
   getSnapshot(): BoundNetworkBadgeState { return this.state }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener) }
@@ -44,8 +50,17 @@ export class BoundNetworkController {
   async load(): Promise<void> {
     try {
       const binding = await this.read()
+      this.retries = 0
       this.publish(binding === undefined ? { kind: 'absent' } : { kind: 'bound', binding })
-    } catch {
+    } catch (error: unknown) {
+      // A just-reopened stored session may not have a live agent yet; the
+      // host rejects the binding read until the session activates. Retry a
+      // bounded number of times before settling on "absent".
+      if (this.retries < this.maxRetries && sessionNotLiveMessage(error)) {
+        this.retries += 1
+        setTimeout(() => { void this.load() }, this.retryDelayMs)
+        return
+      }
       this.publish({ kind: 'absent' })
     }
   }
@@ -54,4 +69,11 @@ export class BoundNetworkController {
     this.state = state
     for (const listener of this.listeners) listener()
   }
+}
+
+function sessionNotLiveMessage(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : typeof error === 'object' && error !== null
+    ? String((error as { message?: unknown }).message ?? error)
+    : String(error)
+  return message.includes('not a live DSH session')
 }

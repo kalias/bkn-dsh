@@ -1,0 +1,71 @@
+name: upstream-dsh-watch
+
+# G1: the plugin pins exactly one DSH revision at a time (compat manifest).
+# The upstream repository is a read-only mirror of internal development, so a
+# new tag can appear at any time and may carry native fixes for — or breaking
+# refactors of — everything the compatibility series patches. This watch opens
+# (or updates) one tracking issue whenever upstream moves ahead of the pin.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # Mondays 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare upstream DSH tags with the pinned revision
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          PINNED=$(node -e '
+          const m = JSON.parse(require("fs").readFileSync("compat/dsh-0.1.6-alpha.2/manifest.json", "utf8"))
+          console.log(m.dsh.tag)')
+
+          LATEST=$(gh api --paginate repos/deepseek-ai/deepseek-harness/tags \
+            -q '[.[].name | select(startswith("dsh-v"))] | join("\n")' \
+            | node -e '
+          // Pick the maximum dsh-vX.Y.Z[-pre] tag by numeric fields, prerelease last.
+          const parse = t => { const m = /^dsh-v(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/.exec(t)
+            if (!m) return undefined
+            return { major: +m[1], minor: +m[2], patch: +m[3], pre: m[4] ?? "" } }
+          const cmp = (a, b) => a.major - b.major || a.minor - b.minor || a.patch - b.patch
+            || (a.pre === b.pre ? 0 : a.pre === "" ? 1 : -1)
+          let best
+          for (const line of require("fs").readFileSync(0, "utf8").split("\n")) {
+            const p = parse(line.trim())
+            if (p && (best === undefined || cmp(p, best.p) > 0)) best = { tag: line.trim(), p }
+          }
+          if (best) console.log(best.tag)')
+
+          echo "pinned: $PINNED  latest: $LATEST"
+          [ -n "$LATEST" ] || { echo "no dsh-v tags found upstream"; exit 0; }
+          [ "$LATEST" != "$PINNED" ] || { echo "upstream is still at the pinned revision"; exit 0; }
+
+          TITLE="Upstream DSH release is ahead of the pinned revision ($LATEST > $PINNED)"
+          BODY="The upstream deepseek-harness mirror published \`$LATEST\` while this repository pins \`$PINNED\`.
+
+          Re-verification checklist (see docs/reviews/2026-09-20-goal-gap-analysis.md, G1/G3):
+          - [ ] typert external-protocol recognition
+          - [ ] ignorable session-event write side
+          - [ ] MCP credential-backed headers
+          - [ ] alpha lockfile consistency
+          - [ ] source-dev tool dispatch (upstream \`prepare\` crash)
+          - [ ] bump peerDependencies + regenerate the compatibility series"
+
+          ISSUE=$(gh issue list -R "$REPO" --state open --search "$TITLE" in:title --json number -q 'length')
+          if [ "$ISSUE" = "0" ]; then
+            gh issue create -R "$REPO" --title "$TITLE" --body "$BODY"
+          else
+            gh issue comment -R "$REPO" $(gh issue list -R "$REPO" --state open --search "$TITLE" in:title --json number -q '.[0].number') --body "Re-checked: upstream latest is still \`$LATEST\`."
+          fi

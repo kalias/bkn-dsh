@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { resolve } from 'node:path'
 
 import { runPrepareCompatibleRuntimeProfile } from '../scripts/prepare-compatible-runtime-profile.mjs'
 
@@ -12,5 +13,9 @@ test('passes explicit paths to the native-profile preparer', () => {
   runPrepareCompatibleRuntimeProfile(['--runtime', '/tmp/runtime', '--plugin', '/tmp/plugin.tgz', '--output', '/tmp/profile'], {
     prepare: input => calls.push(input),
   })
-  assert.deepEqual(calls, [{ runtimeDirectory: '/tmp/runtime', pluginTarball: '/tmp/plugin.tgz', outputDirectory: '/tmp/profile' }])
+  assert.deepEqual(calls, [{
+    runtimeDirectory: resolve('/tmp/runtime'),
+    pluginTarball: resolve('/tmp/plugin.tgz'),
+    outputDirectory: resolve('/tmp/profile'),
+  }])
 })

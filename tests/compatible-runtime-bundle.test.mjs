@@ -36,7 +36,10 @@ test('assembles a self-contained runtime with the patched dependency closure and
   assert.match(readFileSync(join(bundle.directory, 'bin', 'dsh'), 'utf8'), /DSH_HOME/)
   assert.match(readFileSync(join(bundle.directory, 'bin', 'dsh'), 'utf8'), /bootstrap-openbkn-plugin/)
   assert.equal(readFileSync(join(bundle.directory, 'bootstrap-openbkn-plugin.mjs'), 'utf8').includes('initializeProfile'), true)
-  assert.equal(statSync(join(bundle.directory, 'bin', 'dsh')).mode & 0o111, 0o111)
+  // Windows has no POSIX exec bit; the win32 launcher ships as bin/dsh.cmd
+  if (process.platform !== 'win32') {
+    assert.equal(statSync(join(bundle.directory, 'bin', 'dsh')).mode & 0o111, 0o111)
+  }
 })
 
 test('rejects a runtime directory without the patched dependency closure', () => {
@@ -92,8 +95,8 @@ function manifest() {
   return {
     bundle: {
       name: 'openbkn-dsh-runtime',
-      version: '0.1.2-rc.1-openbkn.1',
-      archives: [{ platform: 'darwin-arm64', file: 'openbkn-dsh-runtime-0.1.2-rc.1-openbkn.1-darwin-arm64.tar.gz' }],
+      version: '0.1.6-alpha.2-openbkn.1',
+      archives: [{ platform: 'darwin-arm64', file: 'openbkn-dsh-runtime-0.1.6-alpha.2-openbkn.1-darwin-arm64.tar.gz' }],
     },
     plugin: { artifact: 'openbkn-dsh-business-context-0.1.3.tgz' },
   }

@@ -4,3 +4,4 @@ lib/
 dist/
 *.tgz
 __pycache__/
+release/

@@ -15,7 +15,8 @@
     "runtime:profile": "node scripts/prepare-compatible-runtime-profile.mjs"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-typert-generator": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-typert-generator": "0.1.6-alpha.2",
+    "js-yaml": "4.3.2",
     "tsdown": "^0.22.2"
   }
 }

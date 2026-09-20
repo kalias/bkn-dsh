@@ -2,7 +2,10 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const developmentOverride = 'link:../../../../../DSH/deepseek-harness/packages/typert/generator'
+// Matches the generator override line whatever path it currently holds: the
+// pristine upstream placeholder, or an already-configured local checkout.
+// Any other shape (missing, duplicated, malformed, non-link) fails closed.
+const overrideLinePattern = /^[^\n]*'@deepseek-ai\/dsh-typert-generator':[^\n]*$/gm
 
 function valueAfter(args, flag) {
   const index = args.indexOf(flag)
@@ -10,11 +13,11 @@ function valueAfter(args, flag) {
 }
 
 export function replaceGeneratorOverride(workspace, target) {
-  const occurrences = workspace.split(developmentOverride).length - 1
-  if (occurrences !== 1) {
+  const lines = workspace.match(overrideLinePattern) ?? []
+  if (lines.length !== 1 || !/:\s*link:\S+\s*$/.test(lines[0])) {
     throw new Error('Expected exactly one local DSH generator override in pnpm-workspace.yaml.')
   }
-  return workspace.replace(developmentOverride, target)
+  return workspace.replace(overrideLinePattern, (line) => line.replace(/link:\S+\s*$/, target))
 }
 
 export function configurePinnedDshGenerator(args, {

@@ -9,10 +9,10 @@ test('derives the standard Context Loader endpoint from the configured OpenBKN p
   )
 })
 
-test('honours an explicitly configured Context Loader endpoint', () => {
+test('honours an explicitly configured Context Loader endpoint on the same origin', () => {
   assert.equal(
-    resolveMcpUrl({ baseUrl: 'https://platform.example', mcpUrl: 'https://mcp.example/context/' }),
-    'https://mcp.example/context/',
+    resolveMcpUrl({ baseUrl: 'https://platform.example', mcpUrl: 'https://platform.example/context/' }),
+    'https://platform.example/context/',
   )
 })
 
@@ -35,6 +35,7 @@ test('mounts the compatible MCP client with an ephemeral bearer header and verif
   assert.deepEqual(mounted, {
     transport: 'streamable-http', serverName: 'openbkn', url: 'http://localhost:8081/api/agent-retrieval/v1/mcp/',
     headers: { Authorization: 'Bearer test-token' }, toolCallTimeoutMs: 20_000, failOnStartupError: true,
+    maxInstructionBytes: 32_768,
     reconnect: { enabled: true, initialDelayMs: 500, maxDelayMs: 30_000, maxAttempts: 10 },
   })
 
