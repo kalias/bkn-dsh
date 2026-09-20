@@ -3,6 +3,24 @@
 > 与历轮审核报告的分工：审核报告看「改动对不对」，本文看「离产品目标还差什么」。
 > 基线：分支 `feat/dsh-0.1.6-alpha.2-compat` @ `952d404`；证据来源为仓库内文档、源码与 fork 上的 CI 记录（均为本轮实测或注明出处）。
 
+## 代码位置（三处，勿混淆）
+
+工作区 `/Users/kalias/Documents/project/app/openBKN` 本身不是 git 仓库，其下目录分属三个角色（总览另见根 `CLAUDE.md`）。所有差距条目的代码改动只落在 bkn-dsh；openbkn 侧仅作部署与数据来源，dsh 源只经 compat apply/revert 变更。
+
+**① openbkn 侧（平台，非交付物）**
+- `bkn-foundry/` — OpenBKN 平台源码（`main` @ `5eeaa90f`），本地部署入口 `deploy/dev/mac.sh`；
+- `bkn-samples/` — 样例知识网络，`supply_ontology_hand` 为主 E2E 数据集；
+- `openbkn-ee-0.1.4-online/` 与根目录 `*.lic` — 企业版安装器与 License：不读出内容、不复制、不提交；
+- 运行态：本机 kind 集群 `kind-bkn-dev` 节点 Ready、平台 `https://192.168.50.28` 应答 HTTP 302（2026-09-20 实测）；EE 0.1.4 为 2026-09-19 升级记录（license 未验证）。
+- 涉及条目：G6/G7/G8（评测与样例）、G9（版本前提）、G10（试用路径）。
+
+**② bkn-dsh（交付物，本文所在仓库）**
+- 分支 `feat/dsh-0.1.6-alpha.2-compat`，HEAD `500d0a7`，工作树干净；本文基线 `952d404` 之后仅 round-9 修复与文档提交（`0ee6d9a`、`e142abd`、`500d0a7`）。除①③所列条目外，其余差距的改动均在此仓库。
+
+**③ dsh 源（两棵树，严格区分）**
+- 工作区 `deepseek-harness/`：detached @ tag `dsh-v0.1.6-alpha.2`（`ddefc45f`），带 5 个未 revert 的 compat 补丁文件（`packages/core/session/src/index.ts`、`packages/core/session/src/types.ts`、`packages/typert/generator/src/analyzer.ts`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`）；还原只经 `compat/dsh-0.1.6-alpha.2/apply.mjs --revert`，待用户确认后执行。
+- 干净对照树：G2 实验克隆到 `/tmp/dsh-stock` 等独立目录（见第 6 节约束），不得复用工作区这棵已打补丁的树。涉及条目：G2、G3。
+
 ## 0. 目标与当前达成度
 
 核心目标三条：
@@ -47,6 +65,8 @@ pnpm dsh web
 
 **逐项记录**：① 插件是否加载、控制台有无报错；② 侧栏 OpenBKN 入口是否出现；③ Remote 方法是否 10/10 可用（typert 预构建是否足够）；④ 绑定知识网络 + 一轮问答是否成功；⑤ 重启 DSH 后会话能否重载；⑥ 卸载插件后旧会话能否重载（预期失败，需确认失败形态）。
 **验收**：`docs/evidence/` 新增 `m6-stock-dsh-install.md`，六项逐条记录命令、输出与结论；据此更新 README 的安装路径表述与市场条目描述。
+
+> **已执行（2026-09-20，见 `docs/evidence/m6-stock-dsh-install.md`）**：①–④ 通过（问答经 API key 补测：插件 MCP 工具挂载与 `tool/call` 成立，但 turn 被上游**源码 dev 模式工具派发缺陷**阻断——与预设无关，原生工具同崩，**G5 归因据此修正**；问答完整验证仍以 M5 的 Runtime 记录为准），**⑤⑥ 失败且比预期更严**——插件事件以 required 持久化，重启后会话被拒绝重载，**插件在场也一样**（stock 事件类型白名单为构建期静态集合）。G15/G14 定调：原版直装不可作主分发形态，Runtime 仍是唯一受支持形态；G4（Linux Runtime）权重上升。附带新发现：browse picker 场景下插件「新建工作区」必败且错误被空 catch 吞掉（插件侧待修）；`dsh plugin remove` 不清 node_modules 残留。
 
 ### G3（高，外部约束）上游通道关闭，桥接无退出路径
 

@@ -55,8 +55,21 @@ home on first start, so customers do not need `pnpm` or registry access.
 
 The runtime keeps its profile under an isolated OpenBKN DSH home (`OPENBKN_DSH_HOME` can override it), so it does not alter `~/.dsh`. The platform address is a non-sensitive DSH setting; the token is stored only in DSH credentials. Do not put an OpenBKN token in Cordis YAML.
 
-### Source-build path for DSH maintainers
+### Source-build path: plugin package + compatibility patch
 
-The compatibility package is for maintainers who intentionally build the exact upstream DSH source revision `dsh-v0.1.6-alpha.2`. It is fail-closed and must not be applied to a desktop bundle or another DSH version. See [the compatibility package](compat/dsh-0.1.6-alpha.2/README.md) for its exact source-build procedure.
+Two artifacts work together on your own DSH source checkout at the exact upstream revision `dsh-v0.1.6-alpha.2`:
 
-Later DSH releases that provide the required capabilities upstream do not need this bridge.
+1. **Plugin package** — `openbkn-dsh-business-context-<version>.tgz` (from the project releases, or build it with `pnpm --filter @openbkn/dsh-business-context pack`). It installs and uninstalls through DSH's native plugin manager.
+2. **Compatibility patch script** — [`compat/dsh-0.1.6-alpha.2/`](compat/dsh-0.1.6-alpha.2/) in this repository, applied to the DSH source tree before you build it:
+
+   ```bash
+   git clone --depth 1 --branch dsh-v0.1.6-alpha.2 https://github.com/deepseek-ai/deepseek-harness.git ~/dsh-src
+   node compat/dsh-0.1.6-alpha.2/apply.mjs  --dsh ~/dsh-src   # from this repository
+   node compat/dsh-0.1.6-alpha.2/verify.mjs --dsh ~/dsh-src
+   cd ~/dsh-src && pnpm install && pnpm build
+   pnpm dsh plugin --profile web add file:<path-to-plugin-tgz>
+   ```
+
+**The patch is required, not optional**: on an unpatched DSH the plugin installs, loads, and binds knowledge networks, but the session events it persists are rejected on every DSH restart (the upstream event whitelist is a build-time static set). The patch adds the missing write side so sessions reload normally and stay portable after the plugin is uninstalled. It is fail-closed and must not be applied to a desktop bundle or another DSH version; revert it with `apply.mjs --revert` before changing DSH versions. See [the compatibility package](compat/dsh-0.1.6-alpha.2/README.md) and the step-by-step [install guide](docs/guides/install-with-patch.md) (configuration, credentials, uninstall, known caveats).
+
+Known upstream limitation: running DSH directly from source in dev form breaks tool dispatch for any plugin (`Cannot read properties of undefined (reading 'prepare')`); full Q&A requires a packaged form — the recommended Runtime above, or `scripts/build-compatible-runtime.mjs --dsh <clean-checkout> --output <dir>` from this repository.

@@ -52,8 +52,21 @@ bkn-dsh 是一个增量式 DeepSeek Harness 插件。授权用户可为一个会
 
 Runtime 使用隔离的 OpenBKN DSH Home（可用 `OPENBKN_DSH_HOME` 覆盖），不会改动 `~/.dsh`。平台地址仅作为非敏感 DSH 设置保存；Token 只保存在 DSH credential。不要将 OpenBKN Token 写入 Cordis YAML。
 
-### 面向 DSH 维护者的源码构建路径
+### 源码构建路径：插件包 + 兼容补丁
 
-兼容补丁只适用于主动构建精确上游源码版本 `dsh-v0.1.6-alpha.2` 的维护者。它采用失败即拒绝策略，不能应用于桌面应用包或其他 DSH 版本。具体源码构建步骤请见 [兼容补丁包](compat/dsh-0.1.6-alpha.2/README.zh.md)。
+在你自己的 DSH 源码树（精确处于上游 `dsh-v0.1.6-alpha.2` 版本）上，两样东西配合使用：
 
-后续 DSH 版本若已提供所需能力，则无需使用此桥接。
+1. **插件包** —— `openbkn-dsh-business-context-<版本>.tgz`（从项目 Release 下载，或 `pnpm --filter @openbkn/dsh-business-context pack` 自行构建）。通过 DSH 原生插件管理器安装与卸载。
+2. **兼容补丁脚本** —— 本仓库的 [`compat/dsh-0.1.6-alpha.2/`](compat/dsh-0.1.6-alpha.2/)，在构建 DSH 前应用于其源码树：
+
+   ```bash
+   git clone --depth 1 --branch dsh-v0.1.6-alpha.2 https://github.com/deepseek-ai/deepseek-harness.git ~/dsh-src
+   node compat/dsh-0.1.6-alpha.2/apply.mjs  --dsh ~/dsh-src   # 在本仓库根执行
+   node compat/dsh-0.1.6-alpha.2/verify.mjs --dsh ~/dsh-src
+   cd ~/dsh-src && pnpm install && pnpm build
+   pnpm dsh plugin --profile web add file:<插件 tgz 路径>
+   ```
+
+**补丁是必需项而非可选项**：未打补丁的 DSH 上，插件可以安装、加载并绑定知识网络，但其持久化的会话事件在每次 DSH 重启后被拒绝重载（上游事件白名单是构建期静态集合）。补丁补上缺失的写入侧，使会话正常重载、并在卸载插件后仍可移植。补丁采用失败即拒绝策略，不能应用于桌面应用包或其他 DSH 版本；更换 DSH 版本前先用 `apply.mjs --revert` 还原。详见[兼容补丁包](compat/dsh-0.1.6-alpha.2/README.zh.md)与分步[安装指南](docs/guides/install-with-patch.md)（配置、凭证、卸载与已知注意事项）。
+
+已知上游限制：直接以源码 dev 形式运行 DSH 时，任何插件的工具派发都会失败（`Cannot read properties of undefined (reading 'prepare')`）；完整问答需打包形态——上方的推荐 Runtime，或本仓库的 `scripts/build-compatible-runtime.mjs --dsh <干净源码树> --output <目录>`。
