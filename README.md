@@ -90,3 +90,7 @@ The plugin needs a reachable OpenBKN platform with at least one knowledge networ
 - **Runtime N → N+1**: download the new archive into a fresh directory and start it; the isolated OpenBKN DSH home (`OPENBKN_DSH_HOME`, default under your data directory) carries sessions and settings across runtime versions, so nothing is migrated by hand.
 - **Source-build trees**: before changing the DSH revision, revert the compatibility series (`apply.mjs --revert`), switch, and re-apply the matching series if one exists for the new revision.
 - **Uninstall the plugin**: `dsh plugin --profile <name> remove @openbkn/dsh-business-context`, then remove the leftover `node_modules/@openbkn` inside that profile directory. With the compatibility patch applied, sessions created while the plugin was installed remain readable after uninstall (their plugin events are ignorable); without it, stored sessions that contain plugin events are refused on reload.
+
+## Supported DSH versions
+
+Exactly one upstream DSH revision is supported at a time — currently `dsh-v0.1.6-alpha.2`, pinned by [the compatibility manifest](compat/dsh-0.1.6-alpha.2/manifest.json). A scheduled workflow (`upstream-dsh-watch`) watches upstream tags and opens a tracking issue whenever a release moves ahead of the pin; until the compatibility series is regenerated for it, newer DSH revisions are out of scope.

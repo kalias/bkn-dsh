@@ -87,3 +87,7 @@ Runtime 使用隔离的 OpenBKN DSH Home（可用 `OPENBKN_DSH_HOME` 覆盖）�
 - **Runtime N → N+1**：把新归档解到新目录启动即可；隔离的 OpenBKN DSH Home（`OPENBKN_DSH_HOME`，默认在用户数据目录下）跨 Runtime 版本保留会话与设置，无需手工迁移。
 - **源码构建树**：更换 DSH 版本前先用 `apply.mjs --revert` 还原补丁系列，切换版本后若有对应系列再重新应用。
 - **卸载插件**：`dsh plugin --profile <name> remove @openbkn/dsh-business-context`，并删除该 profile 目录下残留的 `node_modules/@openbkn`。打了兼容补丁时，装插件期间创建的会话在卸载后仍可读（插件事件可忽略）；未打补丁时，含插件事件的存量会话会被拒绝重载。
+
+## 支持的 DSH 版本
+
+一次只支持一个上游 DSH 版本——当前为 `dsh-v0.1.6-alpha.2`，由[兼容 manifest](compat/dsh-0.1.6-alpha.2/manifest.json) 锁定。定时 workflow（`upstream-dsh-watch`）监控上游 tag，一旦有版本超过锁定版本即开出跟踪 issue；在兼容系列针对新版本重新生成之前，更新的 DSH 版本不在支持范围内。
