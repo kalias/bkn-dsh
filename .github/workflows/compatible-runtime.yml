@@ -84,7 +84,8 @@ jobs:
           if [[ "${{ matrix.platform }}" == win32-x64 ]]; then
             # drive the real launcher: --version goes straight to the run label,
             # and cmd.exe /c is non-interactive, so the guard/bootstrap paths stay unexercised-but-honest
-            version="$(cmd.exe /c "$bundle\\bin\\dsh.cmd" --version | tr -d '\r')"
+            # MSYS_NO_PATHCONV stops git-bash from rewriting /c into a drive path, which drops cmd.exe into an interactive shell
+            version="$(MSYS_NO_PATHCONV=1 cmd.exe /c "$bundle\\bin\\dsh.cmd" --version | tr -d '\r')"
           else
             version="$(OPENBKN_DSH_HOME="$(mktemp -d)" "$bundle/bin/dsh" --version)"
           fi
