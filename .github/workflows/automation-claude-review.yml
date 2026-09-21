@@ -406,9 +406,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          state=$(gh pr view "$PR_NUMBER" --json state --jq .state)
+          meta=$(gh pr view "$PR_NUMBER" --json state,isCrossRepository)
+          state=$(jq -r .state <<<"$meta")
+          cross=$(jq -r .isCrossRepository <<<"$meta")
           if [ "$state" != "OPEN" ]; then
             echo "::warning::PR #$PR_NUMBER 已是 $state（本轮跑到一半被合并或关闭），跳过。"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # fork 上的 PR 在这里不 checkout。这个 job 带着 secret 跑，而评论事件是在
+          # base 仓的上下文里求值的——把 fork 的代码拉进这样的工作区就是 pwn-request：
+          # 仓库成员在陌生人的 PR 下回一句 /review，就足以让那份代码在有 secret 的
+          # runner 上被工具链执行。pull_request 事件由 job if 的 head.repo 判据挡住，
+          # 而 issue_comment 的 payload 里根本没有 head repo，只能在这里查。
+          if [ "$cross" = "true" ]; then
+            echo "::warning::PR #$PR_NUMBER 来自 fork，评论触发的评审不拉取它的代码，跳过。"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -896,9 +908,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          state=$(gh pr view "$PR_NUMBER" --json state --jq .state)
+          meta=$(gh pr view "$PR_NUMBER" --json state,isCrossRepository)
+          state=$(jq -r .state <<<"$meta")
+          cross=$(jq -r .isCrossRepository <<<"$meta")
           if [ "$state" != "OPEN" ]; then
             echo "::warning::PR #$PR_NUMBER 已是 $state（本轮跑到一半被合并或关闭），跳过。"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # fork 上的 PR 在这里不 checkout。这个 job 带着 secret 跑，而评论事件是在
+          # base 仓的上下文里求值的——把 fork 的代码拉进这样的工作区就是 pwn-request：
+          # 仓库成员在陌生人的 PR 下回一句 /review，就足以让那份代码在有 secret 的
+          # runner 上被工具链执行。pull_request 事件由 job if 的 head.repo 判据挡住，
+          # 而 issue_comment 的 payload 里根本没有 head repo，只能在这里查。
+          if [ "$cross" = "true" ]; then
+            echo "::warning::PR #$PR_NUMBER 来自 fork，评论触发的评审不拉取它的代码，跳过。"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
