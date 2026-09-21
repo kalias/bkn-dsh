@@ -406,9 +406,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          meta=$(gh pr view "$PR_NUMBER" --json state,isCrossRepository)
+          meta=$(gh pr view "$PR_NUMBER" --json state,isCrossRepository,headRefOid,headRepositoryOwner,headRepository)
           state=$(jq -r .state <<<"$meta")
           cross=$(jq -r .isCrossRepository <<<"$meta")
+          head_sha=$(jq -r .headRefOid <<<"$meta")
+          head_owner=$(jq -r .headRepositoryOwner.login <<<"$meta")
+          head_repo=$(jq -r .headRepository.name <<<"$meta")
           if [ "$state" != "OPEN" ]; then
             echo "::warning::PR #$PR_NUMBER 已是 $state（本轮跑到一半被合并或关闭），跳过。"
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -424,8 +427,10 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          gh pr checkout "$PR_NUMBER"
-          echo "已切到 PR #$PR_NUMBER: $(git rev-parse --abbrev-ref HEAD) @ $(git rev-parse --short HEAD)"
+          # 使用不可变提交 SHA，避免分支在检查后被改写导致 TOCTOU。
+          git fetch --no-tags --depth=1 "https://github.com/${head_owner}/${head_repo}.git" "${head_sha}"
+          git checkout --detach "${head_sha}"
+          echo "已切到 PR #$PR_NUMBER 的固定提交: $(git rev-parse --short HEAD)"
 
       - name: Prepare findings dir
         run: mkdir -p findings
