@@ -1,0 +1,237 @@
+name: release-plugin
+
+# Publishes the plugin package `@openbkn/dsh-business-context` to npm.
+#
+# A `v*` tag IS the release: `v0.1.4` publishes version 0.1.4, and the tag must
+# agree with packages/openbkn-business-context/package.json and with
+# runtime/openbkn-dsh-runtime.manifest.json's `plugin` block — the runtime
+# archive names the plugin tarball by version, so a tag that disagrees with
+# either manifest would ship a runtime pointing at a package that does not
+# exist. The check below fails the run instead.
+#
+# workflow_dispatch is the build-only mode: it runs the whole pipeline
+# (install, patched-DSH build, tests, pack) without publishing, so a release
+# can be rehearsed on a branch. Pass publish=true to make a dispatch publish
+# the version currently in package.json.
+#
+# The build sequence mirrors compatible-runtime.yml, and for the same reason:
+# the plugin build imports `@deepseek-ai/dsh-typert-generator/tsdown`, whose
+# `lib/` only exists after the pinned DSH source is built. Nothing here can be
+# shortened to a plain `pnpm build` without that clone.
+#
+# Auth: npm Trusted Publishing (OIDC) when no NPM_TOKEN secret is set — npm
+# exchanges the GitHub OIDC token with the registry and attaches provenance on
+# its own. Trusted publishing has to be configured per package on npmjs.com,
+# which needs the package to exist, so the FIRST publish of a new package runs
+# the token path: set the NPM_TOKEN secret (a granular token with publish
+# rights on the @openbkn scope), publish once, configure the trusted publisher
+# on npmjs.com, then delete the secret and every later release goes keyless.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to npm (true) or build-only verify (false)'
+        type: boolean
+        default: false
+
+# Tag runs must never cancel each other: each one mints a version that is
+# referenced by number afterwards.
+concurrency:
+  group: release-plugin-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # OIDC for npm Trusted Publishing + provenance
+
+jobs:
+  publish:
+    name: build, test and publish
+    runs-on: ubuntu-latest
+    env:
+      # Surfaced so step `if:` can test for the secret — secrets cannot be
+      # referenced in `if:` directly. Empty when trusted publishing is in use.
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Every constant comes from the manifests, never from a literal repeated
+      # here: the pinned DSH tag, the package name and the version all already
+      # have one home each, and a second copy in this file is a copy that goes
+      # stale silently.
+      - name: Resolve release constants from the manifests
+        id: constants
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+          const fs = require("fs")
+          const manifest = JSON.parse(fs.readFileSync("runtime/openbkn-dsh-runtime.manifest.json", "utf8"))
+          const pkg = JSON.parse(fs.readFileSync("packages/openbkn-business-context/package.json", "utf8"))
+          const lines = [
+            `DSH_TAG=${manifest.dsh.tag}`,
+            `PKG_NAME=${pkg.name}`,
+            `PKG_VERSION=${pkg.version}`,
+            `MANIFEST_PLUGIN_VERSION=${manifest.plugin.version}`,
+          ]
+          fs.appendFileSync(process.env.GITHUB_ENV, lines.join("\n") + "\n")
+          for (const line of lines) console.log(line)
+          '
+
+      # A dispatch publishes only when asked; a tag push always publishes.
+      - name: Decide publish
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.ref_type }}" == "tag" || "${{ inputs.publish }}" == "true" ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only a tag carries an independent claim about the version, so this is
+      # where the three sources get reconciled. On a dispatch there is no tag
+      # and package.json is the single source — but the manifest still has to
+      # agree with it, because the runtime archive is built from that pair.
+      - name: Check version agreement
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${MANIFEST_PLUGIN_VERSION}" != "${PKG_VERSION}" ]]; then
+            echo "::error::runtime/openbkn-dsh-runtime.manifest.json says plugin ${MANIFEST_PLUGIN_VERSION}, package.json says ${PKG_VERSION}. The runtime archive names the plugin tarball by version — fix the manifest (plugin.version and plugin.artifact) before releasing."
+            exit 1
+          fi
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [[ "${TAG_VERSION}" != "${PKG_VERSION}" ]]; then
+              echo "::error::tag ${GITHUB_REF_NAME} resolves to ${TAG_VERSION}, but packages/openbkn-business-context/package.json is ${PKG_VERSION}. Bump the package (and the runtime manifest) first, then tag the commit that carries the bump."
+              exit 1
+            fi
+          fi
+          echo "Releasing ${PKG_NAME}@${PKG_VERSION}"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - uses: actions/setup-node@v4
+        with:
+          # Lower bound of the plugin's own `engines`, so the build and tests
+          # run on the oldest Node the package claims to support.
+          node-version: 22.19.0
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted Publishing (OIDC) needs npm >= 11.5.1; the npm bundled with
+      # Node 22 predates it. Harmless on the token path.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Checkout pinned DSH source
+        run: git clone --depth 1 --branch "${DSH_TAG}" https://github.com/deepseek-ai/deepseek-harness.git release/deepseek-harness
+
+      - name: Point generator override at pinned DSH source
+        run: node scripts/configure-pinned-dsh-generator.mjs --dsh release/deepseek-harness
+
+      - name: Install bkn-dsh dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Fail-closed check of the patch series against a clean pinned tree, same
+      # as the runtime release does: a published plugin that only works against
+      # a DSH the patches no longer apply to is a broken release.
+      - name: Verify compatibility series on a clean pinned tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          node compat/dsh-0.1.6-alpha.2/apply.mjs --dsh release/deepseek-harness
+          node compat/dsh-0.1.6-alpha.2/verify.mjs --dsh release/deepseek-harness
+          node compat/dsh-0.1.6-alpha.2/apply.mjs --dsh release/deepseek-harness --revert
+
+      # Builds the patched DSH and, with it, the typert generator the plugin
+      # build imports.
+      - name: Build compatible DSH runtime
+        run: pnpm runtime:build -- --dsh release/deepseek-harness --output release/runtime
+
+      - name: Test plugin and compatibility tooling
+        # bash so every command's failure fails the step
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @openbkn/dsh-business-context test
+          node --test compat/dsh-0.1.6-alpha.2/tests/*.test.mjs tests/*.test.mjs runtime/tests/*.test.mjs
+          pnpm run package:check
+
+      - name: Build plugin
+        run: pnpm --filter @openbkn/dsh-business-context build
+
+      # Packs first and inspects the tarball: `files` in package.json is an
+      # allowlist, and a missing entry ships a package that resolves to nothing
+      # at import time. npm cannot unpublish the mistake after 72 hours.
+      - name: Pack and inspect the tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/release/plugin"
+          pnpm --filter @openbkn/dsh-business-context pack --pack-destination "${GITHUB_WORKSPACE}/release/plugin"
+          artifact="release/plugin/${PKG_NAME/@openbkn\//openbkn-}-${PKG_VERSION}.tgz"
+          [ -f "$artifact" ] || { echo "::error::expected tarball $artifact was not produced"; exit 1; }
+          tar -tzf "$artifact" | sort
+          for required in package/lib/index.js package/lib/client.js package/lib/typert.host.js package/cordis.patch.yml package/LICENSE; do
+            tar -tzf "$artifact" | grep -qx "$required" || { echo "::error::$required is missing from the tarball — check the \`files\` list in package.json"; exit 1; }
+          done
+
+      # A prerelease (0.1.5-alpha.0) publishes under its own label, so it never
+      # becomes what `npm install @openbkn/dsh-business-context` resolves to; a
+      # stable version takes `latest`.
+      - name: Resolve dist-tag
+        id: disttag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${PKG_VERSION}" == *-* ]]; then
+            label="${PKG_VERSION#*-}"; label="${label%%.*}"
+            echo "dist=${label}" >> "$GITHUB_OUTPUT"
+          else
+            echo "dist=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Trusted publishing path: no NODE_AUTH_TOKEN at all. npm exchanges the
+      # GitHub OIDC token with the registry and attaches provenance itself.
+      - name: Publish to npm (trusted publishing)
+        if: ${{ steps.gate.outputs.publish == 'true' && env.NPM_TOKEN == '' }}
+        working-directory: packages/openbkn-business-context
+        run: npm publish --access public --tag ${{ steps.disttag.outputs.dist }}
+
+      # Bootstrap path, used until the package exists on npmjs.com and its
+      # trusted publisher is configured. `--provenance` is explicit here
+      # because the token path does not add it on its own.
+      - name: Publish to npm (token)
+        if: ${{ steps.gate.outputs.publish == 'true' && env.NPM_TOKEN != '' }}
+        working-directory: packages/openbkn-business-context
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance --tag ${{ steps.disttag.outputs.dist }}
+
+      - name: Summarize
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### ${PKG_NAME}@${PKG_VERSION}"
+            echo
+            echo "- dist-tag: \`${{ steps.disttag.outputs.dist }}\`"
+            echo "- published: ${{ steps.gate.outputs.publish }}"
+            echo "- auth: ${{ env.NPM_TOKEN == '' && 'trusted publishing (OIDC)' || 'NPM_TOKEN' }}"
+            echo "- pinned DSH: \`${DSH_TAG}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: plugin-tarball
+          path: release/plugin/*.tgz
+          if-no-files-found: warn
