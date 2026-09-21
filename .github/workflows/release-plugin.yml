@@ -172,9 +172,13 @@ jobs:
       - name: Build plugin
         run: pnpm --filter @openbkn/dsh-business-context build
 
-      # Packs first and inspects the tarball: `files` in package.json is an
-      # allowlist, and a missing entry ships a package that resolves to nothing
-      # at import time. npm cannot unpublish the mistake after 72 hours.
+      # Packs first and checks the tarball against the package's own export
+      # map: every path `exports` (and `main`/`types`) points at must be inside
+      # it. `files` is an allowlist and the build decides what exists, so an
+      # export can point at a file that was never built or never packed — the
+      # package then installs cleanly and fails at import time. The list is
+      # derived rather than written out here, so a new export is covered the
+      # moment it is added. npm cannot unpublish the mistake after 72 hours.
       - name: Pack and inspect the tarball
         shell: bash
         run: |
@@ -184,9 +188,24 @@ jobs:
           artifact="release/plugin/${PKG_NAME/@openbkn\//openbkn-}-${PKG_VERSION}.tgz"
           [ -f "$artifact" ] || { echo "::error::expected tarball $artifact was not produced"; exit 1; }
           tar -tzf "$artifact" | sort
-          for required in package/lib/index.js package/lib/client.js package/lib/typert.host.js package/cordis.patch.yml package/LICENSE; do
-            tar -tzf "$artifact" | grep -qx "$required" || { echo "::error::$required is missing from the tarball — check the \`files\` list in package.json"; exit 1; }
-          done
+          ARTIFACT="$artifact" node -e '
+          const { execFileSync } = require("child_process")
+          const listing = execFileSync("tar", ["-tzf", process.env.ARTIFACT], { encoding: "utf8" })
+          const packed = new Set(listing.trim().split("\n").map((f) => f.replace(/^package\//, "")))
+          const pkg = JSON.parse(execFileSync("tar", ["-xzOf", process.env.ARTIFACT, "package/package.json"], { encoding: "utf8" }))
+          const targets = []
+          const walk = (entry, where) => {
+            if (typeof entry === "string") targets.push([where, entry])
+            else if (entry && typeof entry === "object") for (const [k, v] of Object.entries(entry)) walk(v, `${where} ${k}`)
+          }
+          walk(pkg.exports, "exports")
+          if (pkg.main) targets.push(["main", pkg.main])
+          if (pkg.types) targets.push(["types", pkg.types])
+          const missing = targets.filter(([, f]) => !packed.has(f.replace(/^\.\//, "")))
+          for (const [where, f] of missing) console.log(`::error::${where} -> ${f} is not in the tarball (never built, or not in the \`files\` allowlist)`)
+          if (missing.length) process.exit(1)
+          console.log(`all ${targets.length} export/main/types targets are packed`)
+          '
 
       # A prerelease (0.1.5-alpha.0) publishes under its own label, so it never
       # becomes what `npm install @openbkn/dsh-business-context` resolves to; a
@@ -203,12 +222,32 @@ jobs:
             echo "dist=latest" >> "$GITHUB_OUTPUT"
           fi
 
+      # npm never lets a version be published twice, so a tag whose version is
+      # already on the registry — a re-run after a later step failed, or the
+      # hand-published bootstrap version being tagged afterwards — would
+      # otherwise fail at publish after everything else passed. Skip instead,
+      # loudly. A lookup that errors for any other reason reads as "not
+      # published", so the publish below still runs and fails on its own if
+      # the version does exist.
+      - name: Check whether this version is already on npm
+        id: published
+        if: ${{ steps.gate.outputs.publish == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if npm view "${PKG_NAME}@${PKG_VERSION}" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Already published::${PKG_NAME}@${PKG_VERSION} is already on npm, so the publish step is skipped. Build and tests above still ran against this commit."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # No NODE_AUTH_TOKEN: npm exchanges the GitHub OIDC token with the
       # registry. Trusted publishing would attach provenance on its own;
       # `--provenance` is explicit anyway so the publish fails instead of
       # shipping an unattested version if the attestation cannot be produced.
       - name: Publish to npm
-        if: ${{ steps.gate.outputs.publish == 'true' }}
+        if: ${{ steps.gate.outputs.publish == 'true' && steps.published.outputs.exists != 'true' }}
         working-directory: packages/openbkn-business-context
         run: npm publish --access public --provenance --tag ${{ steps.disttag.outputs.dist }}
 
@@ -220,7 +259,8 @@ jobs:
             echo "### ${PKG_NAME}@${PKG_VERSION}"
             echo
             echo "- dist-tag: \`${{ steps.disttag.outputs.dist }}\`"
-            echo "- published: ${{ steps.gate.outputs.publish }}"
+            echo "- publish requested: ${{ steps.gate.outputs.publish }}"
+            echo "- already on npm before this run: ${{ steps.published.outputs.exists || 'n/a' }}"
             echo "- auth: trusted publishing (OIDC), with provenance"
             echo "- pinned DSH: \`${DSH_TAG}\`"
           } >> "$GITHUB_STEP_SUMMARY"
