@@ -130,11 +130,6 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
-      # Trusted Publishing (OIDC) needs npm >= 11.5.1; the npm bundled with
-      # Node 22 predates it.
-      - name: Update npm
-        run: npm install -g npm@latest
-
       - name: Checkout pinned DSH source
         run: git clone --depth 1 --branch "${DSH_TAG}" https://github.com/deepseek-ai/deepseek-harness.git release/deepseek-harness
 
@@ -221,6 +216,26 @@ jobs:
           else
             echo "dist=latest" >> "$GITHUB_OUTPUT"
           fi
+
+      # Publishing runs on a toolchain of its own, separate from the Node the
+      # tests above ran on. Trusted publishing needs npm >= 11.5.1, and the npm
+      # that registers publish permissions is 12 — which requires Node
+      # ^22.22.2 || ^24.15.0, so it cannot run on the 22.19.0 used for the
+      # tests. This pair is the one @openbkn/bkn-sdk publishes with through
+      # trusted publishing today. npm is pinned, not `latest`: `latest` moved
+      # to 12 and raised its Node floor between two releases, which would have
+      # broken this step with no change in this repository.
+      - uses: actions/setup-node@v4
+        if: ${{ steps.gate.outputs.publish == 'true' }}
+        with:
+          node-version: 24.19.0
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin npm for publishing
+        if: ${{ steps.gate.outputs.publish == 'true' }}
+        run: |
+          npm install -g npm@12.0.2
+          echo "publishing with node $(node -v), npm $(npm -v)"
 
       # npm never lets a version be published twice, so a tag whose version is
       # already on the registry — a re-run after a later step failed, or the
