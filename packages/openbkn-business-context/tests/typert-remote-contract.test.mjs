@@ -11,9 +11,12 @@ test('generates a strict DSH Remote contract for safe authentication status', ()
   assert.equal(existsSync(host), true)
   assert.equal(existsSync(remote), true)
   assert.equal(existsSync(remoteTypes), true)
+  // Types-only on purpose: src/types.ts holds declarations alone, so the build
+  // emits no lib/types/types.js for a `default` condition to point at. The
+  // typert generator resolves the subpath through `types` first, and the
+  // `typeSymbol` strings that name it are identifiers, never imported.
   assert.deepEqual(manifest.exports['./types'], {
     types: './lib/types/types.d.ts',
-    default: './lib/types/types.js',
   })
   const source = readFileSync(remote, 'utf8')
   const declaration = readFileSync(remoteTypes, 'utf8')

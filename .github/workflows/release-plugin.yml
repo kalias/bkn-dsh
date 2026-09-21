@@ -250,7 +250,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if npm view "${PKG_NAME}@${PKG_VERSION}" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
+          # Compared on output, not only on the exit code: an npm that answered
+          # "no such version" with exit 0 and empty output would otherwise make
+          # every tag skip its publish silently.
+          found="$(npm view "${PKG_NAME}@${PKG_VERSION}" version --registry https://registry.npmjs.org 2>/dev/null || true)"
+          if [[ "$found" == "${PKG_VERSION}" ]]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "::notice title=Already published::${PKG_NAME}@${PKG_VERSION} is already on npm, so the publish step is skipped. Build and tests above still ran against this commit."
           else
