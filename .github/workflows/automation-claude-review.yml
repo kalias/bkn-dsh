@@ -406,12 +406,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          meta=$(gh pr view "$PR_NUMBER" --json state,isCrossRepository,headRefOid,headRepositoryOwner,headRepository)
+          meta=$(gh pr view "$PR_NUMBER" --json state,isCrossRepository,headRefOid)
           state=$(jq -r .state <<<"$meta")
           cross=$(jq -r .isCrossRepository <<<"$meta")
           head_sha=$(jq -r .headRefOid <<<"$meta")
-          head_owner=$(jq -r .headRepositoryOwner.login <<<"$meta")
-          head_repo=$(jq -r .headRepository.name <<<"$meta")
           if [ "$state" != "OPEN" ]; then
             echo "::warning::PR #$PR_NUMBER 已是 $state（本轮跑到一半被合并或关闭），跳过。"
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -427,9 +425,24 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # 使用不可变提交 SHA，避免分支在检查后被改写导致 TOCTOU。
-          git fetch --no-tags --depth=1 "https://github.com/${head_owner}/${head_repo}.git" "${head_sha}"
+          # 取上面那次 API 调用读到的不可变 SHA，而不是 `gh pr checkout` 取「此刻的
+          # 分支头」：两者之间作者可以再推一个提交，结论就会挂在一个没人查过的提交上。
+          #
+          # 不加 --depth：浅取会写下 .git/shallow 把历史截断在这一个提交上，连本地
+          # 已有的父提交也一并看不见（实测 `git log` 只剩 1 条、`git show HEAD~1:<file>`
+          # 报 invalid object name）。而评审 prompt 要求对快照类文件 `git show
+          # <ref>:<上一版本同名文件>` 逐行比对，上面那次 checkout 也正是为此才
+          # fetch-depth: 0——截断了这条就废了。
+          #
+          # 源用 origin：fork 已在上一个判据里跳过，此处的头必然在本仓，没必要再按
+          # API 返回的字段拼一个远端 URL 出来。
+          git fetch --no-tags origin "${head_sha}"
           git checkout --detach "${head_sha}"
+          actual=$(git rev-parse HEAD)
+          if [ "$actual" != "${head_sha}" ]; then
+            echo "::error::Checked out commit ($actual) does not match expected PR head SHA (${head_sha})."
+            exit 1
+          fi
           echo "已切到 PR #$PR_NUMBER 的固定提交: $(git rev-parse --short HEAD)"
 
       - name: Prepare findings dir
@@ -932,8 +945,9 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # 使用不可变提交 SHA，避免在安全检查与 checkout 之间被分支推进造成 TOCTOU。
-          git fetch --no-tags --depth=1 origin "$sha"
+          # 取上面读到的不可变 SHA，理由与 review job 那一步相同；同样不能加 --depth，
+          # 浅取会写下 .git/shallow 把历史截断在这一个提交上。
+          git fetch --no-tags origin "$sha"
           git checkout --detach FETCH_HEAD
           actual=$(git rev-parse HEAD)
           if [ "$actual" != "$sha" ]; then
