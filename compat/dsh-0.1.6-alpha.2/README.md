@@ -49,7 +49,7 @@ build the local plugin artifact and install it through DSH's native plugin comma
 ```bash
 pnpm --filter @openbkn/dsh-business-context build
 pnpm --filter @openbkn/dsh-business-context pack --pack-destination /tmp/openbkn-plugin
-pnpm dsh plugin --profile web add file:/tmp/openbkn-plugin/openbkn-dsh-business-context-0.1.4.tgz
+pnpm dsh plugin --profile web add file:/tmp/openbkn-plugin/openbkn-dsh-business-context-0.1.5-rc.1.tgz
 ```
 
 To remove the complete series before changing DSH version:

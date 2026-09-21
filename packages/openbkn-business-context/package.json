@@ -1,6 +1,6 @@
 {
   "name": "@openbkn/dsh-business-context",
-  "version": "0.1.4",
+  "version": "0.1.5-rc.1",
   "description": "OpenBKN business knowledge-network context for DeepSeek Harness",
   "license": "Apache-2.0",
   "type": "module",
@@ -29,8 +29,7 @@
       "default": "./lib/index.js"
     },
     "./types": {
-      "types": "./lib/types/types.d.ts",
-      "default": "./lib/types/types.js"
+      "types": "./lib/types/types.d.ts"
     },
     "./client": {
       "types": "./lib/types/client/index.d.ts",

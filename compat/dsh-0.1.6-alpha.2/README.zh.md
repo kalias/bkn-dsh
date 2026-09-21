@@ -28,7 +28,7 @@ node compat/dsh-0.1.6-alpha.2/verify.mjs --dsh /path/to/deepseek-harness
 ```bash
 pnpm --filter @openbkn/dsh-business-context build
 pnpm --filter @openbkn/dsh-business-context pack --pack-destination /tmp/openbkn-plugin
-pnpm dsh plugin --profile web add file:/tmp/openbkn-plugin/openbkn-dsh-business-context-0.1.4.tgz
+pnpm dsh plugin --profile web add file:/tmp/openbkn-plugin/openbkn-dsh-business-context-0.1.5-rc.1.tgz
 ```
 
 切换 DSH 版本前先移除整个补丁系列：

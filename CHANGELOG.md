@@ -2,8 +2,14 @@
 
 All notable changes to this project are documented here.
 
-## Unreleased
+## 0.1.5-rc.1 (2026-09-21)
 
+First release published to npm as `@openbkn/dsh-business-context`, under the
+`rc` dist-tag. Later versions publish from CI (`release-plugin.yml`, on a `v*`
+tag) through npm trusted publishing, each with a provenance attestation.
+
+- Harden the plugin's outbound security boundary, and surface bind errors that
+  were previously swallowed.
 - Windows and CI hardening from the online acceptance runs: bash test gates,
   an assembled-runtime entrypoint smoke test, win32 pnpm spawning, and
   case/separator-normalized mirror-root matching with pure matching tests.
