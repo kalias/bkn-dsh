@@ -42,5 +42,8 @@ node scripts/check-runtime-portability.mjs --output release/artifacts --platform
 
 - Remotes: `origin` = openbkn-ai/bkn-dsh (upstream, pull-only for this user), `fork` = kalias/bkn-dsh. Work lands on fork branches; `compatible-runtime` runs via `workflow_dispatch` on the fork.
 - Commits use conventional prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `ci:`).
-- Pushes, tags (`openbkn-dsh-runtime-v*` triggers a GitHub Release) and releases need explicit user approval.
+- Pushes, tags and releases need explicit user approval. Two tag prefixes release different artifacts:
+  `openbkn-dsh-runtime-v*` builds the runtime archives and cuts a GitHub Release (`compatible-runtime.yml`);
+  `v*` publishes `@openbkn/dsh-business-context` to npm (`release-plugin.yml`). A `v*` tag must match both
+  `packages/openbkn-business-context/package.json` and the runtime manifest's `plugin` block — the workflow fails otherwise.
 - When a release artifact is produced, record its SHA-256, platform, build base commit, and the verification commands.
