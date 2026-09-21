@@ -908,9 +908,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          meta=$(gh pr view "$PR_NUMBER" --json state,isCrossRepository)
+          meta=$(gh pr view "$PR_NUMBER" --json state,isCrossRepository,headRefOid)
           state=$(jq -r .state <<<"$meta")
           cross=$(jq -r .isCrossRepository <<<"$meta")
+          sha=$(jq -r .headRefOid <<<"$meta")
           if [ "$state" != "OPEN" ]; then
             echo "::warning::PR #$PR_NUMBER 已是 $state（本轮跑到一半被合并或关闭），跳过。"
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -926,7 +927,15 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          gh pr checkout "$PR_NUMBER"
+          # 使用不可变提交 SHA，避免在安全检查与 checkout 之间被分支推进造成 TOCTOU。
+          git fetch --no-tags --depth=1 origin "$sha"
+          git checkout --detach FETCH_HEAD
+          actual=$(git rev-parse HEAD)
+          if [ "$actual" != "$sha" ]; then
+            echo "::error::Checked out commit ($actual) does not match expected PR head SHA ($sha)."
+            exit 1
+          fi
+          echo "checked_sha=$sha" >> "$GITHUB_OUTPUT"
 
       # 一片产出都没有时一个 artifact 都不存在。download-artifact 在这种情况下是否
       # 静默通过没有保证，硬失败会把 verify 和 verdict 一起带走——那正是要消掉的
