@@ -19,13 +19,21 @@ name: release-plugin
 # `lib/` only exists after the pinned DSH source is built. Nothing here can be
 # shortened to a plain `pnpm build` without that clone.
 #
-# Auth: npm Trusted Publishing (OIDC) when no NPM_TOKEN secret is set — npm
-# exchanges the GitHub OIDC token with the registry and attaches provenance on
-# its own. Trusted publishing has to be configured per package on npmjs.com,
-# which needs the package to exist, so the FIRST publish of a new package runs
-# the token path: set the NPM_TOKEN secret (a granular token with publish
-# rights on the @openbkn scope), publish once, configure the trusted publisher
-# on npmjs.com, then delete the secret and every later release goes keyless.
+# Auth is npm Trusted Publishing (OIDC) only — no npm token lives in this
+# repository. npm exchanges the GitHub OIDC token for a short-lived publish
+# credential scoped to this package, this repository and this workflow file.
+# Every version is published with a provenance attestation, which binds the
+# tarball to the commit and the run that built it.
+#
+# One-time bootstrap: npm can only attach a trusted publisher to a package that
+# already exists (npm/cli#8544), and this workflow cannot publish until one is
+# attached. So the first version of a new package goes up by hand — the same
+# way @openbkn/bkn-sdk 0.1.0 did — and then:
+#   npm trust github @openbkn/dsh-business-context \
+#     --repo openbkn-ai/bkn-dsh --file release-plugin.yml --allow-publish
+# The hand-published version carries no provenance; every release after it
+# does. Do not put `provenance: true` in publishConfig: it would make that
+# manual bootstrap fail, since provenance can only be generated in CI.
 
 on:
   push:
@@ -51,10 +59,6 @@ jobs:
   publish:
     name: build, test and publish
     runs-on: ubuntu-latest
-    env:
-      # Surfaced so step `if:` can test for the secret — secrets cannot be
-      # referenced in `if:` directly. Empty when trusted publishing is in use.
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -127,7 +131,7 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       # Trusted Publishing (OIDC) needs npm >= 11.5.1; the npm bundled with
-      # Node 22 predates it. Harmless on the token path.
+      # Node 22 predates it.
       - name: Update npm
         run: npm install -g npm@latest
 
@@ -199,21 +203,13 @@ jobs:
             echo "dist=latest" >> "$GITHUB_OUTPUT"
           fi
 
-      # Trusted publishing path: no NODE_AUTH_TOKEN at all. npm exchanges the
-      # GitHub OIDC token with the registry and attaches provenance itself.
-      - name: Publish to npm (trusted publishing)
-        if: ${{ steps.gate.outputs.publish == 'true' && env.NPM_TOKEN == '' }}
+      # No NODE_AUTH_TOKEN: npm exchanges the GitHub OIDC token with the
+      # registry. Trusted publishing would attach provenance on its own;
+      # `--provenance` is explicit anyway so the publish fails instead of
+      # shipping an unattested version if the attestation cannot be produced.
+      - name: Publish to npm
+        if: ${{ steps.gate.outputs.publish == 'true' }}
         working-directory: packages/openbkn-business-context
-        run: npm publish --access public --tag ${{ steps.disttag.outputs.dist }}
-
-      # Bootstrap path, used until the package exists on npmjs.com and its
-      # trusted publisher is configured. `--provenance` is explicit here
-      # because the token path does not add it on its own.
-      - name: Publish to npm (token)
-        if: ${{ steps.gate.outputs.publish == 'true' && env.NPM_TOKEN != '' }}
-        working-directory: packages/openbkn-business-context
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance --tag ${{ steps.disttag.outputs.dist }}
 
       - name: Summarize
@@ -225,7 +221,7 @@ jobs:
             echo
             echo "- dist-tag: \`${{ steps.disttag.outputs.dist }}\`"
             echo "- published: ${{ steps.gate.outputs.publish }}"
-            echo "- auth: ${{ env.NPM_TOKEN == '' && 'trusted publishing (OIDC)' || 'NPM_TOKEN' }}"
+            echo "- auth: trusted publishing (OIDC), with provenance"
             echo "- pinned DSH: \`${DSH_TAG}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
